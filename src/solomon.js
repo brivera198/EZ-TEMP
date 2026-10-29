@@ -408,9 +408,9 @@ export function buildSolomon(mats) {
     g.position.set(0, BASE_Y, 0);
     g.scale.setScalar(CUBIT);
   }
-  const navel = new THREE.PointLight(0xffc27a, 80, 40, 2);
+  const navel = new THREE.PointLight(0xffc27a, 110, 40, 2);
   navel.position.set(32, H + 18, 0);
-  const hoh = new THREE.PointLight(0xffd690, 40, 20, 2);
+  const hoh = new THREE.PointLight(0xffd690, 110, 22, 2);
   hoh.position.set(4, H + 14, 0);
   templeGroup.add(navel, hoh);
 
