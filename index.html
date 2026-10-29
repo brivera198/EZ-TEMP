@@ -1,0 +1,273 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Ezekiel's Temple</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Frank+Ruhl+Libre:wght@400;500;700&family=Alegreya+Sans:ital,wght@0,400;0,500;0,700;1,400&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: full-bleed 3D scene; translucent instrument panels float over it,
+   left for navigation, right for the measured record. Single dark look on
+   purpose: the panels sit on top of a lit scene. */
+:root {
+  --ink: #0e131b;
+  --panel: rgba(14, 19, 27, 0.82);
+  --panel-solid: #141a24;
+  --line: rgba(236, 227, 207, 0.14);
+  --stone: #ece3cf;
+  --muted: #aaa08b;
+  --gold: #dcab4c;
+  --lapis: #7aa2ea;
+  --accent: var(--gold);
+  --font-display: 'Frank Ruhl Libre', 'Times New Roman', Georgia, serif;
+  --font-body: 'Alegreya Sans', 'Segoe UI', system-ui, sans-serif;
+  --font-mono: 'IBM Plex Mono', ui-monospace, 'SFMono-Regular', Menlo, monospace;
+  --radius: 10px;
+  color-scheme: dark;
+}
+body[data-mode="so"] { --accent: var(--lapis); }
+html, body { height: 100%; }
+body {
+  margin: 0; background: var(--ink); color: var(--stone);
+  font: 15px/1.45 var(--font-body); overflow: hidden;
+  -webkit-font-smoothing: antialiased;
+}
+#app { position: fixed; inset: 0; }
+#scene { position: absolute; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; outline: none; }
+button { font: inherit; color: inherit; }
+button:focus-visible, input:focus-visible, select:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+/* Labels in the scene */
+#labels { position: absolute; inset: 0; pointer-events: none; overflow: hidden; }
+.label {
+  position: absolute; left: 0; top: 0; white-space: nowrap;
+  font: 500 12.5px/1 var(--font-body); letter-spacing: 0.02em;
+  color: var(--stone); padding: 4px 8px 4px 16px; border-radius: 999px;
+  background: rgba(14, 19, 27, 0.62); border: 1px solid var(--line);
+  transform: translate(-50%, -100%);
+}
+.label::before { content: ""; position: absolute; left: 6px; top: 50%; width: 5px; height: 5px; margin-top: -2.5px; border-radius: 50%; background: var(--accent); }
+.label.land { font-family: var(--font-display); font-size: 14px; font-style: italic; background: rgba(14, 19, 27, 0.4); }
+.label.land::before { background: #c9b48a; }
+.label.small { font-size: 11px; padding: 3px 7px 3px 14px; }
+.label.so::before { background: var(--lapis); }
+.label.river::before { background: #6cc4d0; }
+.label.reeds::before { background: #e0604f; }
+
+/* Brand + mode switch */
+.brand {
+  position: absolute; top: calc(14px + env(safe-area-inset-top, 0px)); left: calc(14px + env(safe-area-inset-left, 0px));
+  display: flex; flex-direction: column; gap: 10px; max-width: min(340px, calc(100vw - 28px));
+}
+.brand h1 {
+  margin: 0; font: 700 30px/1 var(--font-display); letter-spacing: 0.01em; text-wrap: balance;
+  text-shadow: 0 1px 12px rgba(0, 0, 0, 0.55);
+}
+.brand h1 .he { font-weight: 500; font-size: 0.72em; color: var(--accent); margin-left: 8px; }
+.brand .sub { font: 12px/1.3 var(--font-mono); color: var(--stone); opacity: 0.85; text-shadow: 0 1px 8px rgba(0, 0, 0, 0.7); }
+.modes { display: inline-flex; background: var(--panel); border: 1px solid var(--line); border-radius: 999px; padding: 3px; backdrop-filter: blur(8px); align-self: flex-start; }
+.modes button {
+  border: 0; background: transparent; padding: 6px 12px; border-radius: 999px; cursor: pointer;
+  font-size: 13.5px; font-weight: 500; color: var(--muted); white-space: nowrap;
+}
+.modes button[aria-pressed="true"] { background: var(--accent); color: #17130b; }
+.chip {
+  align-self: flex-start; border: 1px solid var(--line); background: var(--panel); border-radius: 999px;
+  padding: 4px 11px; font-size: 12.5px; color: var(--muted); cursor: pointer; backdrop-filter: blur(8px);
+}
+.chip:hover { color: var(--stone); }
+body.panels-hidden #views, body.panels-hidden #info { display: none; }
+
+/* Panels */
+.panel {
+  position: absolute; background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius);
+  backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
+  overflow: auto; overscroll-behavior: contain;
+}
+#views { top: calc(178px + env(safe-area-inset-top, 0px)); left: calc(14px + env(safe-area-inset-left, 0px)); width: 248px; max-height: calc(100% - 240px); padding: 12px; }
+#info { top: calc(14px + env(safe-area-inset-top, 0px)); right: calc(14px + env(safe-area-inset-right, 0px)); width: 370px; max-height: calc(100% - 80px); display: flex; flex-direction: column; overflow: hidden; }
+.panel h3 {
+  margin: 0 0 6px; font: 600 11px/1 var(--font-mono); text-transform: uppercase; letter-spacing: 0.12em; color: var(--muted);
+}
+.section + .section { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--line); }
+.views-list { display: flex; flex-direction: column; gap: 2px; }
+.views-list button {
+  text-align: left; border: 0; background: transparent; padding: 6px 8px; border-radius: 6px; cursor: pointer; font-size: 14px;
+}
+.views-list button:hover { background: rgba(236, 227, 207, 0.08); }
+.views-list button.active { background: rgba(236, 227, 207, 0.12); box-shadow: inset 2px 0 0 var(--accent); }
+.layers label { display: flex; align-items: center; gap: 8px; font-size: 14px; padding: 3px 0; cursor: pointer; }
+.layers input { accent-color: var(--accent); width: 15px; height: 15px; }
+.layers .ref { margin-left: auto; font: 11px var(--font-mono); color: var(--muted); }
+.time { display: flex; align-items: center; gap: 10px; }
+.time input { flex: 1; accent-color: var(--accent); }
+.time output { font: 13px var(--font-mono); min-width: 44px; text-align: right; }
+.walk-btn {
+  width: 100%; margin-top: 2px; padding: 8px 10px; border-radius: 8px; border: 1px solid var(--accent);
+  background: transparent; color: var(--stone); cursor: pointer; font-weight: 500;
+}
+.walk-btn[aria-pressed="true"] { background: var(--accent); color: #17130b; }
+
+.tabs { display: flex; border-bottom: 1px solid var(--line); flex: none; }
+.tabs button { flex: 1; border: 0; background: transparent; padding: 11px 8px 10px; cursor: pointer; font-size: 13.5px; font-weight: 500; color: var(--muted); }
+.tabs button[aria-selected="true"] { color: var(--stone); box-shadow: inset 0 -2px 0 var(--accent); }
+.tab-body { overflow: auto; padding: 14px 16px 18px; min-height: 0; }
+.eyebrow { font: 500 11px/1 var(--font-mono); text-transform: uppercase; letter-spacing: 0.12em; color: var(--accent); }
+.card h2 { margin: 6px 0 2px; font: 700 23px/1.15 var(--font-display); text-wrap: balance; }
+.card .he { font: 500 20px/1.3 var(--font-display); color: var(--accent); direction: rtl; text-align: left; }
+.card ul.dims { list-style: none; padding: 0; margin: 12px 0; display: flex; flex-direction: column; gap: 6px; }
+.card ul.dims li { font: 13px/1.4 var(--font-mono); padding-left: 14px; position: relative; font-variant-numeric: tabular-nums; }
+.card ul.dims li::before { content: ""; position: absolute; left: 0; top: 0.55em; width: 6px; height: 1px; background: var(--accent); }
+.card .refs { font: 500 13px/1.4 var(--font-mono); color: var(--stone); margin: 0 0 8px; }
+.card .refs::before { content: "Text  "; color: var(--muted); white-space: pre; }
+.card p { margin: 0 0 10px; }
+.card .note { color: #d8cfbb; font-size: 14.5px; }
+.counterpart { margin-top: 12px; padding: 10px 12px; border: 1px dashed var(--line); border-radius: 8px; }
+.counterpart .eyebrow { color: var(--muted); }
+.counterpart.so .eyebrow b { color: var(--lapis); font-weight: 500; }
+.counterpart.ez .eyebrow b { color: var(--gold); font-weight: 500; }
+.counterpart p { margin: 6px 0 8px; font-size: 14px; }
+.link-btn { border: 0; background: none; padding: 0; color: var(--accent); cursor: pointer; font-weight: 500; text-decoration: underline; text-underline-offset: 3px; }
+.facts { display: grid; grid-template-columns: auto 1fr; gap: 6px 12px; margin: 12px 0; font-size: 14px; }
+.facts dt { font: 12px/1.6 var(--font-mono); color: var(--muted); text-transform: uppercase; letter-spacing: 0.06em; }
+.facts dd { margin: 0; }
+.cmp { display: flex; flex-direction: column; gap: 12px; }
+.cmp .row { display: grid; grid-template-columns: 1fr 1fr; gap: 4px 12px; padding-bottom: 12px; border-bottom: 1px solid var(--line); }
+.cmp .row:last-child { border-bottom: 0; }
+.cmp .feat { grid-column: 1 / -1; font: 600 15px/1.2 var(--font-display); }
+.cmp .col { font-size: 13.5px; line-height: 1.4; min-width: 0; }
+.cmp .col::before { display: block; font: 500 10.5px/1.6 var(--font-mono); text-transform: uppercase; letter-spacing: 0.1em; }
+.cmp .col.ez::before { content: "Ezekiel"; color: var(--gold); }
+.cmp .col.so::before { content: "Solomon"; color: var(--lapis); }
+.cmp-intro { margin: 0 0 12px; color: var(--muted); font-size: 14px; }
+
+#hint {
+  position: absolute; left: 50%; bottom: calc(14px + env(safe-area-inset-bottom, 0px)); transform: translateX(-50%);
+  font: 12px/1.3 var(--font-mono); color: var(--stone); background: var(--panel); border: 1px solid var(--line);
+  padding: 7px 12px; border-radius: 999px; white-space: nowrap; max-width: calc(100vw - 28px); overflow: hidden; text-overflow: ellipsis;
+}
+#loading {
+  position: absolute; inset: 0; display: grid; place-content: center; gap: 10px; text-align: center;
+  background: radial-gradient(ellipse at center, #1a2230 0%, var(--ink) 70%); z-index: 20; transition: opacity 0.6s;
+}
+#loading .t { font: 700 34px/1 var(--font-display); }
+#loading .s { font: 13px var(--font-mono); color: var(--muted); }
+#loading .reed { width: 220px; height: 3px; margin: 8px auto 0; background: var(--line); border-radius: 2px; overflow: hidden; }
+#loading .reed i { display: block; height: 100%; width: 0; background: var(--gold); transition: width 0.3s; }
+#loading.done { opacity: 0; pointer-events: none; }
+#error { display: none; max-width: 420px; color: #f1c3b8; font-size: 14px; }
+
+.mobile-bar { display: none; }
+#walkpad { position: absolute; right: calc(16px + env(safe-area-inset-right, 0px)); bottom: calc(64px + env(safe-area-inset-bottom, 0px)); display: none; grid-template-columns: repeat(3, 48px); gap: 6px; }
+#walkpad button { height: 48px; border-radius: 10px; border: 1px solid var(--line); background: var(--panel); font-size: 18px; touch-action: none; }
+#walkpad .sp { visibility: hidden; }
+body.walking #walkpad.touch { display: grid; }
+
+@media (max-width: 860px) {
+  .brand h1 { font-size: 24px; }
+  .brand .sub, .chip { display: none; }
+  #views, #info {
+    left: calc(10px + env(safe-area-inset-left, 0px)); right: calc(10px + env(safe-area-inset-right, 0px));
+    top: auto; bottom: calc(62px + env(safe-area-inset-bottom, 0px)); width: auto; max-height: 52%;
+  }
+  #views:not(.open), #info:not(.open) { display: none; }
+  #hint { display: none; }
+  .mobile-bar {
+    display: flex; gap: 8px; position: absolute; left: 50%; transform: translateX(-50%);
+    bottom: calc(12px + env(safe-area-inset-bottom, 0px));
+  }
+  .mobile-bar button {
+    padding: 9px 16px; border-radius: 999px; border: 1px solid var(--line); background: var(--panel);
+    backdrop-filter: blur(8px); font-weight: 500; cursor: pointer;
+  }
+  .mobile-bar button[aria-expanded="true"] { background: var(--accent); color: #17130b; }
+  #walkpad { bottom: calc(70px + env(safe-area-inset-bottom, 0px)); }
+}
+@media (prefers-reduced-motion: reduce) {
+  #loading { transition: none; }
+}
+</style>
+</head>
+<body data-mode="ez">
+<div id="app">
+  <canvas id="scene" tabindex="0" aria-label="3D model of the temple on the map of Jerusalem"></canvas>
+  <div id="labels" aria-hidden="true"></div>
+
+  <header class="brand">
+    <h1><span id="title">Ezekiel's Temple</span> <span class="he" lang="he">מִקְדָּשׁ</span></h1>
+    <div class="sub" id="sub">Ezekiel 40–48 · long cubit 52.5 cm · Jerusalem</div>
+    <div class="modes" role="group" aria-label="Which temple">
+      <button type="button" data-mode="ez" aria-pressed="true">Ezekiel</button>
+      <button type="button" data-mode="so" aria-pressed="false">Solomon</button>
+      <button type="button" data-mode="overlay" aria-pressed="false">Overlay</button>
+    </div>
+    <button type="button" class="chip" id="toggle-panels" aria-pressed="false">Hide panels</button>
+  </header>
+
+  <aside id="views" class="panel" aria-label="Views and layers">
+    <div class="section">
+      <h3>Views</h3>
+      <div class="views-list" id="views-list"></div>
+    </div>
+    <div class="section">
+      <h3>Walk</h3>
+      <button type="button" class="walk-btn" id="walk" aria-pressed="false">Walk at ground level</button>
+    </div>
+    <div class="section layers">
+      <h3>Layers</h3>
+      <label><input type="checkbox" id="lyr-labels" checked> Labels</label>
+      <label><input type="checkbox" id="lyr-city" checked> City before 586 BC</label>
+      <label class="ez-only"><input type="checkbox" id="lyr-river" checked> River <span class="ref">47:1–12</span></label>
+      <label class="ez-only"><input type="checkbox" id="lyr-migrash" checked> Open land <span class="ref">45:2</span></label>
+      <label class="ez-only"><input type="checkbox" id="lyr-reeds"> "500 reeds" <span class="ref">42:16</span></label>
+      <label class="ez-only"><input type="checkbox" id="lyr-ezcity"> City of Ezek 48 <span class="ref">48:30</span></label>
+    </div>
+    <div class="section">
+      <h3>Time of day</h3>
+      <div class="time">
+        <input type="range" id="time" min="5.5" max="18.5" step="0.05" value="9" aria-label="Time of day">
+        <output id="time-out" for="time">09:00</output>
+      </div>
+    </div>
+  </aside>
+
+  <aside id="info" class="panel" aria-label="Measurements">
+    <div class="tabs" role="tablist">
+      <button type="button" role="tab" id="tab-info" aria-selected="true" aria-controls="pane-info">Measurements</button>
+      <button type="button" role="tab" id="tab-cmp" aria-selected="false" aria-controls="pane-cmp">Ezekiel vs Solomon</button>
+    </div>
+    <div class="tab-body" id="pane-info" role="tabpanel"></div>
+    <div class="tab-body" id="pane-cmp" role="tabpanel" hidden></div>
+  </aside>
+
+  <div id="hint">Drag to look around · right-drag to pan · scroll to zoom · click a building for its measurements</div>
+  <div class="mobile-bar">
+    <button type="button" data-open="views" aria-expanded="false">Views</button>
+    <button type="button" data-open="info" aria-expanded="false">Measurements</button>
+  </div>
+  <div id="walkpad" aria-label="Walk controls">
+    <span class="sp"></span><button type="button" data-k="f" aria-label="Forward">▲</button><span class="sp"></span>
+    <button type="button" data-k="l" aria-label="Turn left">◀</button><button type="button" data-k="b" aria-label="Back">▼</button><button type="button" data-k="r" aria-label="Turn right">▶</button>
+  </div>
+
+  <div id="loading">
+    <div class="t">Ezekiel's Temple</div>
+    <div class="s" id="load-step">Taking up the measuring reed…</div>
+    <div class="reed"><i id="load-bar"></i></div>
+    <div id="error"></div>
+  </div>
+</div>
+
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+    "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+  }
+}
+</script>
+<script type="module" src="./src/main.js"></script>
+</body>
+</html>
