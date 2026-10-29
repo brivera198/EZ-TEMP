@@ -2,14 +2,28 @@
 // platforms shared by both temples. Local frame in long cubits with the
 // origin over the rock: u = east, v = south, y = up from the base ground.
 import * as THREE from 'three';
-import { Builder } from './builder.js';
-import { CUBIT, LEVEL, BASE_Y, EZ_CENTER_X, PODIUM_HALF_C, PALACE_PAD } from './data.js';
+import { Builder, aeolicCapital } from './builder.js';
+import { CUBIT, LEVEL, BASE_Y, EZ_CENTER_X, PODIUM_HALF_C, PALACE_PAD, SOLOMON_PLATFORM } from './data.js';
 
 const O = LEVEL.outer, I = LEVEL.inner, H = LEVEL.house;
 const TOP = H + 30;                      // 30 cubits high (1 Kgs 6:2)
 const EZ_U = EZ_CENTER_X / CUBIT;        // Ezekiel's precinct centre in this frame (125)
 const PAD_Y = (PALACE_PAD.y - BASE_Y) / CUBIT;
 const DEEP = (30 - BASE_Y) / CUBIT;      // bottom of retaining walls
+// Solomon's 10th-century terrace in this frame (cubits).
+const SP = {
+  u0: SOLOMON_PLATFORM.x0 / CUBIT, u1: SOLOMON_PLATFORM.x1 / CUBIT,
+  v0: SOLOMON_PLATFORM.z0 / CUBIT, v1: SOLOMON_PLATFORM.z1 / CUBIT,
+};
+
+// Pair of proto-Aeolic capitals on pilasters flanking a doorway in a wall
+// that faces direction `ry` (radians about y; 0 = facing +v/south).
+function capitals(bld, u, v, y, ry, spread, width = 3) {
+  for (const s of [-1, 1]) {
+    const du = Math.cos(ry) * s * spread, dv = -Math.sin(ry) * s * spread;
+    bld.geom('ashlar', aeolicCapital(width), u + du, y, v + dv, ry);
+  }
+}
 
 const sw = (bld, key, u0, u1, v0, v1, y0, y1) => bld.box(key, u0, u1, y0, y1, v0, v1);
 
@@ -20,25 +34,40 @@ function coursedWall(bld, u0, u1, v0, v1, y0) {
   sw(bld, 'ashlarDark', u0 - 0.15, u1 + 0.15, v0 - 0.15, v1 + 0.15, y0 + 5.2, y0 + 5.6);
 }
 
-// Platforms shared by both temples, in Ezekiel's frame (origin = precinct centre).
+// Platforms, in Ezekiel's frame (origin = precinct centre):
+// square = the 500-cubit Temple Mount (c. 600 BC and Ezekiel), sp = Solomon's
+// smaller summit terrace (c. 950 BC), shared = Ophel terrace and its stair.
 export function buildPlatforms(mats) {
-  const bld = new Builder(mats);
-  const group = new THREE.Group();
-  group.position.set(EZ_CENTER_X, BASE_Y, 0);
-  group.scale.setScalar(CUBIT);
+  const make = () => {
+    const group = new THREE.Group();
+    group.position.set(EZ_CENTER_X, BASE_Y, 0);
+    group.scale.setScalar(CUBIT);
+    return group;
+  };
   const R = PODIUM_HALF_C;
-  sw(bld, 'podium', -R, R, -R, R, DEEP, 0);
-  bld.zone('so-podium', -R, R, -0.3, 0.3, -R, R);
+  const sq = new Builder(mats);
+  sw(sq, 'podium', -R, R, -R, R, DEEP, 0);
+  sq.zone('so-podium', -R, R, -0.3, 0.3, -R, R);
+  const sp = new Builder(mats);
+  const su0 = SP.u0 - EZ_U, su1 = SP.u1 - EZ_U;
+  sw(sp, 'podium', su0, su1, SP.v0, SP.v1, DEEP, 0);
+  sp.zone('so-platform-early', su0, su1, -0.3, 0.3, SP.v0, SP.v1);
   // Ophel terrace and the stair linking it to the south gate.
+  const sh = new Builder(mats);
   const pu0 = (PALACE_PAD.x0 - EZ_CENTER_X) / CUBIT, pu1 = (PALACE_PAD.x1 - EZ_CENTER_X) / CUBIT;
   const pv0 = PALACE_PAD.z0 / CUBIT, pv1 = PALACE_PAD.z1 / CUBIT;
-  sw(bld, 'podium', pu0, pu1, pv0, pv1, DEEP, PAD_Y);
+  sw(sh, 'podium', pu0, pu1, pv0, pv1, DEEP, PAD_Y);
   const n = 40, rise = -PAD_Y / n, tread = (pv0 - R) / n;
   for (let i = 0; i < n; i++) {
-    sw(bld, 'ashlar', -13, 13, R + i * tread, R + (i + 1) * tread + 0.01, DEEP, -(i + 0.5) * rise);
+    sw(sh, 'ashlar', -13, 13, R + i * tread, R + (i + 1) * tread + 0.01, DEEP, -(i + 0.5) * rise);
   }
-  for (const s of [-1, 1]) sw(bld, 'podium', s * 13, s * 15, R, pv0, DEEP, 1);
-  return { group, zones: bld.finish(group) };
+  for (const s of [-1, 1]) sw(sh, 'podium', s * 13, s * 15, R, pv0, DEEP, 1);
+  const out = {};
+  for (const [key, b] of [['square', sq], ['sp', sp], ['shared', sh]]) {
+    const group = make();
+    out[key] = { group, zones: b.finish(group) };
+  }
+  return out;
 }
 
 // --- Furnishings ----------------------------------------------------------------
@@ -176,6 +205,9 @@ function hall(bld, u0, u1, v0, v1, y0, h, { windows = 1, door = 's', key = 'ashl
     sw(bld, key, u0, cu - 3, v1 - t, v1, y0, y0 + h);
     sw(bld, key, cu + 3, u1, v1 - t, v1, y0, y0 + h);
     sw(bld, key, cu - 3, cu + 3, v1 - t, v1, y0 + 9, y0 + h);
+    // Pilasters with proto-Aeolic capitals flank the entrance.
+    for (const s of [-1, 1]) sw(bld, 'ashlar', cu + s * 4.5 - 1.2, cu + s * 4.5 + 1.2, v1, v1 + 0.6, y0, y0 + 9);
+    capitals(bld, cu, v1 + 0.3, y0 + 9, 0, 4.5, 3.2);
   } else {
     sw(bld, key, u0, u1, v1 - t, v1, y0, y0 + h);
   }
@@ -198,23 +230,29 @@ export function buildSolomon(mats) {
   const labels = [];
   const T = (u, y, v) => new THREE.Vector3(u * CUBIT, BASE_Y + y * CUBIT, v * CUBIT);
 
-  // --- Great court on the platform (1 Kgs 7:12) ------------------------------------
-  const g0 = EZ_U - 244, g1 = EZ_U + 244;
-  sw(site, 'earth', g0, g1, -244, 244, 0, O);
-  site.zone('so-great-court', g0, g1, O - 0.2, O + 0.3, -244, 244);
-  coursedWall(site, g0, g1, -247, -244, 0);
-  coursedWall(site, g0, EZ_U - 12, 244, 247, 0);       // south, with a gate toward the palace
-  coursedWall(site, EZ_U + 12, g1, 244, 247, 0);
-  coursedWall(site, g0 - 3, g0, -247, 247, 0);
-  coursedWall(site, g1, g1 + 3, -247, -10, 0);          // east, with a gate
-  coursedWall(site, g1, g1 + 3, 10, 247, 0);
-  for (const [u, v] of [[g1 + 1.5, -12], [g1 + 1.5, 12], [EZ_U - 14, 245.5], [EZ_U + 14, 245.5]]) {
-    sw(site, 'ashlar', u - 3, u + 3, v - 3, v + 3, 0, O + 9);
-  }
-  for (let i = 0; i < 7; i++) {
-    sw(site, 'ashlar', g1 + 3 + (6 - i), g1 + 4 + (6 - i), -8, 8, -0.6, 0.5 * (i + 1));
-    sw(site, 'ashlar', EZ_U - 10, EZ_U + 10, 247 + (6 - i), 248 + (6 - i), -0.6, 0.5 * (i + 1));
-  }
+  // --- Great court (1 Kgs 7:12) ----------------------------------------------------
+  // c. 600 BC: the 500-cubit square. c. 950 BC: the summit terrace only.
+  const courtLate = new Builder(mats);
+  const courtEarly = new Builder(mats);
+  const greatCourt = (b, g0, g1, n0, n1) => {
+    sw(b, 'earth', g0, g1, n0, n1, 0, O);
+    b.zone('so-great-court', g0, g1, O - 0.2, O + 0.3, n0, n1);
+    coursedWall(b, g0, g1, n0 - 3, n0, 0);
+    coursedWall(b, g0, EZ_U - 12, n1, n1 + 3, 0);       // south, with a gate toward the palace
+    coursedWall(b, EZ_U + 12, g1, n1, n1 + 3, 0);
+    coursedWall(b, g0 - 3, g0, n0 - 3, n1 + 3, 0);
+    coursedWall(b, g1, g1 + 3, n0 - 3, -10, 0);          // east, with a gate
+    coursedWall(b, g1, g1 + 3, 10, n1 + 3, 0);
+    for (const [u, v] of [[g1 + 1.5, -12], [g1 + 1.5, 12], [EZ_U - 14, n1 + 1.5], [EZ_U + 14, n1 + 1.5]]) {
+      sw(b, 'ashlar', u - 3, u + 3, v - 3, v + 3, 0, O + 9);
+    }
+    for (let i = 0; i < 7; i++) {
+      sw(b, 'ashlar', g1 + 3 + (6 - i), g1 + 4 + (6 - i), -8, 8, -0.6, 0.5 * (i + 1));
+      sw(b, 'ashlar', EZ_U - 10, EZ_U + 10, n1 + 3 + (6 - i), n1 + 4 + (6 - i), -0.6, 0.5 * (i + 1));
+    }
+  };
+  greatCourt(courtLate, EZ_U - 244, EZ_U + 244, -244, 244);
+  greatCourt(courtEarly, SP.u0 + 8, SP.u1 - 10, SP.v0 + 8, SP.v1 - 10);
 
   // --- Inner court (1 Kgs 6:36) ---------------------------------------------------
   sw(site, 'pavement', -40, 160, -50, 50, O, I);
@@ -404,7 +442,9 @@ export function buildSolomon(mats) {
   // --- Finish ----------------------------------------------------------------------
   const templeGroup = new THREE.Group();
   const siteGroup = new THREE.Group();
-  for (const g of [templeGroup, siteGroup]) {
+  const courtLateGroup = new THREE.Group();
+  const courtEarlyGroup = new THREE.Group();
+  for (const g of [templeGroup, siteGroup, courtLateGroup, courtEarlyGroup]) {
     g.position.set(0, BASE_Y, 0);
     g.scale.setScalar(CUBIT);
   }
@@ -415,6 +455,10 @@ export function buildSolomon(mats) {
   templeGroup.add(navel, hoh);
 
   const zones = [...temple.finish(templeGroup), ...site.finish(siteGroup)];
+  const courtZones = {
+    late: courtLate.finish(courtLateGroup).map((z) => ({ ...z, periods: ['late'] })),
+    early: courtEarly.finish(courtEarlyGroup).map((z) => ({ ...z, periods: ['early'] })),
+  };
 
   const fireGeo = new THREE.ConeGeometry(0.5, 1.6, 7, 1, true);
   fireGeo.translate(0, 0.8, 0);
@@ -443,5 +487,8 @@ export function buildSolomon(mats) {
   altarLight.position.set(118, I + 15, 0);
   templeGroup.add(altarLight);
 
-  return { templeGroup, siteGroup, zones, labels, fireMeshes, altarLight };
+  return {
+    templeGroup, siteGroup, courtLateGroup, courtEarlyGroup, zones, courtZones, labels, fireMeshes, altarLight,
+    altarTop: T(118, I + 11, 0),
+  };
 }

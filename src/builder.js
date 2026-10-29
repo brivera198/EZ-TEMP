@@ -23,6 +23,60 @@ export function boxGeom(w, h, d, tile, x0 = 0, y0 = 0, z0 = 0) {
   return g;
 }
 
+// Proto-Aeolic capital: the Iron Age volute capital found in the City of
+// David, Ramat Rahel, Samaria and Megiddo. Width W, base at y = 0, facing +z.
+export function aeolicCapital(W) {
+  const D = 0.3 * W;
+  const parts = [];
+  const add = (g, x, y, z) => { g.translate(x, y, z); parts.push(g.index ? g.toNonIndexed() : g); };
+  add(new THREE.BoxGeometry(W, 0.14 * W, D * 1.1), 0, 0.6 * W, 0);                 // abacus
+  for (const s of [-1, 1]) {
+    const vol = new THREE.CylinderGeometry(0.21 * W, 0.21 * W, D, 20);              // volutes
+    vol.rotateX(Math.PI / 2);
+    add(vol, s * 0.27 * W, 0.32 * W, 0);
+    const eye = new THREE.CylinderGeometry(0.075 * W, 0.075 * W, D * 1.18, 12);
+    eye.rotateX(Math.PI / 2);
+    add(eye, s * 0.27 * W, 0.32 * W, 0);
+  }
+  const tri = new THREE.Shape();
+  tri.moveTo(-0.22 * W, 0.53 * W);
+  tri.lineTo(0.22 * W, 0.53 * W);
+  tri.lineTo(0, 0.1 * W);
+  tri.closePath();
+  add(new THREE.ExtrudeGeometry(tri, { depth: D, bevelEnabled: false }), 0, 0, -D / 2);
+  add(new THREE.BoxGeometry(0.46 * W, 0.1 * W, D), 0, 0.05 * W, 0);               // neck band
+  return mergeGeometries(parts.map((g) => {
+    for (const name of Object.keys(g.attributes)) if (!['position', 'normal', 'uv'].includes(name)) g.deleteAttribute(name);
+    return g;
+  }));
+}
+
+// Box with one vertex colour, for small instanced models.
+export function cbox(x0, x1, y0, y1, z0, z1, col) {
+  const g = new THREE.BoxGeometry(x1 - x0, y1 - y0, z1 - z0).toNonIndexed();
+  g.translate((x0 + x1) / 2, (y0 + y1) / 2, (z0 + z1) / 2);
+  return paint(g, col);
+}
+
+export function paint(g, [r, gg, b]) {
+  const n = g.attributes.position.count;
+  const c = new Float32Array(n * 3);
+  for (let i = 0; i < n; i++) { c[i * 3] = r; c[i * 3 + 1] = gg; c[i * 3 + 2] = b; }
+  g.setAttribute('color', new THREE.BufferAttribute(c, 3));
+  return g;
+}
+
+// Merge non-indexed parts that carry position, normal, uv and colour.
+export function mergeParts(parts) {
+  return mergeGeometries(parts.map((g) => {
+    const n = g.index ? g.toNonIndexed() : g;
+    for (const name of Object.keys(n.attributes)) if (!['position', 'normal', 'uv', 'color'].includes(name)) n.deleteAttribute(name);
+    if (!n.attributes.color) paint(n, [1, 1, 1]);
+    if (!n.attributes.uv) n.setAttribute('uv', new THREE.Float32BufferAttribute(new Float32Array(n.attributes.position.count * 2), 2));
+    return n;
+  }));
+}
+
 export class Builder {
   constructor(mats) {
     this.mats = mats;

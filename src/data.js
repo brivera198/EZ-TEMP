@@ -285,7 +285,13 @@ export const INFO = {
     mode: 'so', title: 'Great court', he: 'הֶחָצֵר הַגְּדוֹלָה',
     dims: ['Same construction as the inner court wall', 'Encloses temple and palace; size not given'],
     refs: '1 Kgs 7:9–12',
-    note: 'The model uses the 500-cubit Temple Mount square (Mishnah, Middot 2:1). That square is probably later than Solomon.'
+    note: 'In the c. 950 BC view the court covers only the summit terrace. In the c. 600 BC view it fills the 500-cubit square of the later Temple Mount (Mishnah, Middot 2:1).'
+  },
+  'so-platform-early': {
+    mode: 'so', title: 'Temple terrace, c. 950 BC (reconstruction)', he: 'הַר הַבַּיִת',
+    dims: ['About 170 × 205 m in the model', 'Natural hilltop around it, not yet built up'],
+    refs: '2 Chr 3:1; 1 Kgs 9:15, 24',
+    note: 'No trace of Solomon\'s platform has been identified, so its size here is a reconstruction around the courts. The large 500-cubit square came later.'
   },
   'so-forest': {
     mode: 'so', title: 'House of the Forest of Lebanon', he: 'בֵּית יַעַר הַלְּבָנוֹן',
@@ -309,7 +315,219 @@ export const INFO = {
   'so-podium': {
     mode: 'both', title: 'Temple Mount platform', he: 'הַר הַבַּיִת',
     dims: ['520 × 520 cubits in the model: the 500-cubit precinct plus an apron for the gate steps', 'Mishnah: the Temple Mount was 500 × 500 cubits'],
-    refs: 'Ezek 45:2; Mishnah Middot 2:1', note: 'The retaining walls are a reconstruction.'
+    refs: 'Ezek 45:2; Mishnah Middot 2:1',
+    note: 'Leen Ritmeyer dates this square to King Hezekiah (about 700 BC); its date is debated. The retaining walls are a reconstruction.'
+  },
+
+  // City and countryside ---------------------------------------------------
+  'land-judah': {
+    mode: 'both', title: 'Judean hill country', he: 'הַר יְהוּדָה',
+    dims: ['Terraced slopes of red terra rossa soil over limestone', 'Wheat, barley, vines, figs, pomegranates, olives (Deut 8:8)', 'Rain-fed: about 550 mm a year in Jerusalem'],
+    refs: 'Deut 8:7–10; Isa 5:1–2; Jer 32:15',
+    note: 'Dry-stone terraces turned the steep hills into fields and orchards. East of the Mount of Olives the land drops into the Judean desert.'
+  },
+  'city-house': {
+    mode: 'both', title: 'Four-room house', he: 'בַּיִת',
+    dims: ['About 10 × 12 m: three long rooms and a broad room round a courtyard', 'Stone footings, stone or mud-brick walls, lime plaster', 'Flat roof of beams, brushwood and rolled clay, with a parapet', 'Often an upper room on the roof'],
+    refs: 'Deut 22:8; 2 Kgs 4:10; Josh 2:6',
+    note: 'The usual Israelite and Judahite house. Houses of this period were excavated on the east slope of the City of David (the "House of Ahiel"). Here they are set on terraces that follow the slope, with lanes between the rows.'
+  },
+  'city-house-ruin': {
+    mode: 'both', title: 'House burned in 586 BC', he: '',
+    dims: ['Roofs and upper floors burned and fell in', 'Walls left standing a metre or two high'],
+    refs: '2 Kgs 25:9; Jer 52:13; Lam 4:11',
+    note: 'Excavators in the City of David found houses destroyed in this fire. The "House of the Bullae" held 51 clay seal impressions, one naming Gemariah son of Shaphan (Jer 36:10).'
+  },
+  'city-people': {
+    mode: 'both', title: 'People of Jerusalem', he: '',
+    dims: ['Tunic (kuttonet) of wool or linen under a mantle (simlah)', 'Priests in linen, with linen turbans (Ezek 44:17–18)', 'Population c. 600 BC: estimates range from about 8,000 to 25,000'],
+    refs: 'Gen 37:3; Exod 22:26–27; Ezek 44:17–19',
+    note: 'The figures give scale and show how the courts and streets were used. Most clothing was undyed wool; madder red and indigo blue were costly.'
+  },
+  'city-flock': {
+    mode: 'both', title: 'Sheep and goats', he: 'צֹאן',
+    dims: ['Mixed flocks of fat-tailed sheep and black goats', 'Folded at night in stone pens'],
+    refs: 'Lev 3:9; Song 4:1; 1 Sam 17:34–35; Ezek 34',
+    note: 'Ezekiel 34 uses the shepherd and his flock as a picture of Israel\'s rulers.'
+  },
+  'city-olive': {
+    mode: 'both', title: 'Olive and fig trees', he: 'זַיִת · תְּאֵנָה',
+    dims: ['Olives: evergreen, living for centuries; oil for food, lamps and anointing', 'Figs and terebinths give darker shade'],
+    refs: 'Deut 8:8; Zech 14:4; Mic 4:4',
+    note: 'The Mount of Olives was named for its groves. "Every man under his vine and under his fig tree" (Mic 4:4).'
+  },
+  'city-vines': {
+    mode: 'both', title: 'Vineyards', he: 'כֶּרֶם',
+    dims: ['Vines planted in rows along the terraces', 'Each vineyard with a watchtower and a winepress'],
+    refs: 'Isa 5:1–7; 2 Kgs 25:12',
+    note: 'After 586 BC the Babylonians left "some of the poorest of the land to be vinedressers and farmers" (2 Kgs 25:12).'
+  },
+  'city-tower': {
+    mode: 'both', title: 'Field watchtower', he: 'מִגְדָּל',
+    dims: ['Round dry-stone tower about 4 m across', 'Used to guard the crop and store produce'],
+    refs: 'Isa 5:2; 1:8',
+    note: 'Hundreds of such towers survive in the hills around Jerusalem, though most cannot be dated closely.'
+  },
+  'city-sheepfold': {
+    mode: 'both', title: 'Sheepfold', he: 'גִּדְרוֹת צֹאן',
+    dims: ['Ring of dry-stone wall about 15 m across'],
+    refs: 'Num 32:16; 2 Sam 7:8; Ps 78:70', note: ''
+  },
+  'city-threshing': {
+    mode: 'both', title: 'Threshing floor', he: 'גֹּרֶן',
+    dims: ['Flat circle of rock or beaten earth, 10–15 m across', 'On an open hilltop where the wind carries off the chaff'],
+    refs: '2 Sam 24:18–25; 2 Chr 3:1; Ruth 3:2',
+    note: 'David bought the threshing floor of Araunah, and Solomon built the temple on it (2 Chr 3:1).'
+  },
+  'city-wall-late': {
+    mode: 'both', title: 'City wall, c. 600 BC', he: 'חוֹמַת יְרוּשָׁלַיִם',
+    dims: ['Encloses about 60 hectares: the City of David and the Western Hill', 'Towers and crenellated parapets', 'Broad Wall section about 7 m thick'],
+    refs: '2 Chr 32:5; 33:14; Isa 22:10; Neh 3',
+    note: 'Hezekiah enclosed the Western Hill around 701 BC. The towers, crenellations and the shields hung on them follow the Assyrian reliefs of the siege of Lachish (701 BC) and Ezek 27:11. Parts of the course are conjectural.'
+  },
+  'city-wall-early': {
+    mode: 'both', title: 'City wall, c. 950 BC', he: 'חוֹמַת יְרוּשָׁלַיִם',
+    dims: ['Encloses the City of David and the Ophel: about 12–15 hectares'],
+    refs: '1 Kgs 3:1; 9:15',
+    note: 'Solomon "built the wall of Jerusalem round about" (1 Kgs 3:1). How far a 10th-century wall existed is debated. This line follows the later Iron Age wall on the City of David.'
+  },
+  'city-wall-ruin': {
+    mode: 'both', title: 'Broken-down wall, 573 BC', he: '',
+    dims: ['Breached in 586 BC and pulled down'],
+    refs: '2 Kgs 25:4, 10; Neh 1:3; Lam 2:8',
+    note: '"The army of the Chaldeans … broke down the walls of Jerusalem round about" (2 Kgs 25:10). They stayed in ruins until Nehemiah rebuilt them in 445 BC.'
+  },
+  'city-broadwall': {
+    mode: 'both', title: 'The Broad Wall', he: 'הַחוֹמָה הָרְחָבָה',
+    dims: ['About 7 m thick; 65 m of it excavated', 'Built over houses that were pulled down for it'],
+    refs: 'Isa 22:10; Neh 3:8; 12:38',
+    note: 'Found by Nahman Avigad in the Jewish Quarter in the 1970s. It shows Hezekiah enclosing the Western Hill: "you broke down the houses to fortify the wall" (Isa 22:10).'
+  },
+  'gate-corner': {
+    mode: 'both', title: 'Corner Gate', he: 'שַׁעַר הַפִּנָּה',
+    dims: ['North-west corner of the city', '400 cubits (210 m) west of the Gate of Ephraim'],
+    refs: '2 Kgs 14:13; 2 Chr 26:9; Jer 31:38',
+    note: 'Jehoash of Israel broke down the wall "from the Gate of Ephraim to the Corner Gate, 400 cubits". Uzziah built towers here. Location approximate.'
+  },
+  'gate-ephraim': {
+    mode: 'both', title: 'Gate of Ephraim', he: 'שַׁעַר אֶפְרַיִם',
+    dims: ['North wall, facing the road to Benjamin and Ephraim'],
+    refs: '2 Kgs 14:13; Neh 8:16; 12:39',
+    note: 'Placed 400 cubits east of the Corner Gate, following 2 Kgs 14:13. Location approximate.'
+  },
+  'gate-fish': {
+    mode: 'both', title: 'Fish Gate', he: 'שַׁעַר הַדָּגִים',
+    dims: ['North wall, at the head of the Tyropoeon Valley'],
+    refs: 'Zeph 1:10; 2 Chr 33:14; Neh 3:3; 13:16',
+    note: 'Named for the fish traders. Manasseh built an outer wall "as far as the entrance of the Fish Gate". Location approximate.'
+  },
+  'gate-valley': {
+    mode: 'both', title: 'Valley Gate', he: 'שַׁעַר הַגַּיְא',
+    dims: ['Opened onto a valley: the Tyropoeon or the Hinnom'],
+    refs: '2 Chr 26:9; Neh 2:13; 3:13',
+    note: 'In the c. 950 BC view it is on the west side of the City of David, where Nehemiah\'s Valley Gate was. Its place in the larger city of c. 600 BC is uncertain.'
+  },
+  'gate-dung': {
+    mode: 'both', title: 'Dung Gate (Potsherd Gate?)', he: 'שַׁעַר הָאַשְׁפֹּת',
+    dims: ['South wall, leading down to the Hinnom Valley'],
+    refs: 'Neh 2:13; 3:14; Jer 19:2',
+    note: 'Refuse was carried out here. Often identified with Jeremiah\'s Potsherd Gate. Most gate names are known from Nehemiah (c. 445 BC). Location approximate.'
+  },
+  'gate-fountain': {
+    mode: 'both', title: 'Fountain Gate', he: 'שַׁעַר הָעַיִן',
+    dims: ['South end of the city, by the pools and the King\'s Garden'],
+    refs: 'Neh 2:14; 3:15; 2 Kgs 25:4',
+    note: 'Zedekiah fled by night "by the gate between the two walls, by the king\'s garden" (2 Kgs 25:4). Location approximate.'
+  },
+  'gate-water': {
+    mode: 'both', title: 'Water Gate', he: 'שַׁעַר הַמַּיִם',
+    dims: ['East slope of the City of David, above the Gihon Spring'],
+    refs: 'Neh 3:26; 8:1',
+    note: 'Location approximate.'
+  },
+  'gate-horse': {
+    mode: 'both', title: 'Horse Gate', he: 'שַׁעַר הַסּוּסִים',
+    dims: ['East side, near the palace and the temple'],
+    refs: 'Jer 31:40; 2 Chr 23:15; Neh 3:28',
+    note: 'Athaliah was killed "at the entrance of the Horse Gate" (2 Chr 23:15). Location approximate.'
+  },
+  'city-sss': {
+    mode: 'both', title: 'Stepped Stone Structure (the Millo?)', he: 'הַמִּלּוֹא',
+    dims: ['Stepped stone mantle on the east slope, about 18 m high', 'About 40 m wide'],
+    refs: '2 Sam 5:9; 1 Kgs 9:15, 24; 11:27',
+    note: 'It held up a large building on the summit. Many identify it with the Millo ("filling") that David and Solomon built. Its date (12th–9th century BC) is debated.'
+  },
+  'city-lss': {
+    mode: 'both', title: 'Large Stone Structure', he: '',
+    dims: ['Massive walls on the summit of the City of David', 'Excavated 2005–2008 by Eilat Mazar'],
+    refs: '2 Sam 5:11',
+    note: 'Mazar identified it with the palace Hiram\'s craftsmen built for David. Its date and purpose are disputed; it may be one complex with the Stepped Stone Structure.'
+  },
+  'city-gihon': {
+    mode: 'both', title: 'Gihon Spring and its towers', he: 'גִּיחוֹן',
+    dims: ['The city\'s only perennial spring', 'Spring Tower with walls up to about 7 m thick', 'Pool Tower guarding a rock-cut pool'],
+    refs: '1 Kgs 1:33–45; 2 Chr 32:30; 33:14',
+    note: 'Solomon was anointed king here (1 Kgs 1:38–39). The excavators dated the towers to about 1700 BC; radiocarbon dates published in 2017 point to the 9th century BC.'
+  },
+  'city-channel': {
+    mode: 'both', title: 'Siloam channel', he: 'הַשִּׁלֹחַ',
+    dims: ['Open and rock-cut channel along the east slope', 'Carried Gihon water south to pools and gardens'],
+    refs: 'Isa 8:6',
+    note: '"The waters of Shiloah that go softly" (Isa 8:6). Openings in its side let water out to the fields of the Kidron.'
+  },
+  'city-tunnel': {
+    mode: 'both', title: 'Hezekiah\'s tunnel', he: 'נִקְבַּת הַשִּׁלֹחַ',
+    dims: ['533 m long, cut through the rock of the City of David', 'Dug from both ends; the Siloam Inscription records the meeting'],
+    refs: '2 Kgs 20:20; 2 Chr 32:30; Isa 22:11',
+    note: 'Cut about 701 BC to bring the Gihon water inside the walls before the Assyrian siege. It runs underground, so it is drawn as a dashed line.'
+  },
+  'city-siloam': {
+    mode: 'both', title: 'Pool of Siloam', he: 'בְּרֵכַת הַשֶּׁלַח',
+    dims: ['Fed by Hezekiah\'s tunnel', 'Iron Age size unknown; modelled 36 × 18 m'],
+    refs: 'Neh 3:15; Isa 22:11',
+    note: 'The pool excavated in 2004 is from the Second Temple period; the Iron Age pool lay in the same area.'
+  },
+  'city-lower-pool': {
+    mode: 'both', title: 'Lower Pool (King\'s Pool)', he: 'הַבְּרֵכָה הַתַּחְתּוֹנָה',
+    dims: ['Reservoir in the King\'s Garden at the mouth of the Tyropoeon', 'Modelled 50 × 30 m'],
+    refs: 'Isa 22:9; Neh 2:14',
+    note: 'Usually identified with Birket el-Hamra.'
+  },
+  'city-garden': {
+    mode: 'both', title: 'The King\'s Garden', he: 'גַּן הַמֶּלֶךְ',
+    dims: ['Irrigated gardens and orchards where the Kidron, Tyropoeon and Hinnom meet', 'Watered by the Siloam channel and En-rogel'],
+    refs: '2 Kgs 25:4; Jer 39:4; Neh 3:15; 1 Kgs 1:9',
+    note: 'Zedekiah fled through here by night in 586 BC.'
+  },
+  'city-silwan': {
+    mode: 'both', title: 'Silwan necropolis', he: '',
+    dims: ['About 50 rock-cut tombs in the cliff east of the Kidron', '8th–7th century BC; some with gabled ceilings and Hebrew inscriptions'],
+    refs: 'Isa 22:15–16',
+    note: 'One inscription names "…yahu who is over the house", perhaps the steward Shebna, whom Isaiah rebuked for cutting himself a tomb in the rock.'
+  },
+  'city-monolith': {
+    mode: 'both', title: 'Monolithic tomb ("Tomb of Pharaoh\'s Daughter")', he: '',
+    dims: ['Cube cut free from the cliff, about 6 m across', 'Once topped by a pyramid, later quarried away'],
+    refs: '1 Kgs 3:1; 7:8 (the name is modern)',
+    note: 'Iron Age. The traditional name links it to Solomon\'s Egyptian wife, but nothing supports that.'
+  },
+  'city-bamah': {
+    mode: 'both', title: 'High places of Chemosh and Molech', he: 'בָּמָה',
+    dims: ['Raised platform with an altar and standing stones'],
+    refs: '1 Kgs 11:7; 2 Kgs 23:13',
+    note: 'Built late in Solomon\'s reign on "the hill east of Jerusalem", the Mount of Corruption. Josiah defiled them about 622 BC, so they are not shown in later periods. The form follows excavated shrines such as Arad.'
+  },
+  'city-ramp': {
+    mode: 'both', title: 'Babylonian siege ramp', he: 'סֹלְלָה',
+    dims: ['Earth and rubble ramp up to the top of the wall', 'Siege of about 18 months (Jer 52:4–7)'],
+    refs: '2 Kgs 25:1–4; Jer 32:24; 52:4–7; Ezek 4:2',
+    note: 'Its place on the north side is a reconstruction: the north was the only side without a deep valley. Babylonian arrowheads were found by the "Israelite Tower" on the Western Hill. The city fell in 586 BC (some date it 587).'
+  },
+  'city-man': {
+    mode: 'ez', title: 'The man with the measuring reed', he: 'קְנֵה הַמִּדָּה',
+    dims: ['"His appearance was like bronze"', 'A line of flax and a measuring reed in his hand', 'Reed: 6 long cubits = 3.15 m'],
+    refs: 'Ezek 40:3–5; 47:3',
+    note: 'He stands in the gate and leads Ezekiel through every measurement of chapters 40–42.'
   },
 };
 
@@ -338,19 +556,39 @@ export const COMPARE = [
   ['City', 'A separate city 4,500 cubits square, south of the holy land (48:15–35)', 'The temple sits on the north edge of the City of David'],
 ];
 
-// --- Jerusalem landmarks (late Iron Age II, before 586 BC) -------------------
+// --- Periods ------------------------------------------------------------------
+// early: Solomon's Jerusalem. late: the last years of the kingdom of Judah.
+// ruin: the year of Ezekiel's vision, 14 years after the city fell (Ezek 40:1).
+export const PERIODS = {
+  early: { short: 'c. 950 BC', title: 'Solomon\'s Jerusalem, c. 950 BC' },
+  late: { short: 'c. 600 BC', title: 'Jerusalem before the fall, c. 600 BC' },
+  ruin: { short: '573 BC', title: 'Jerusalem in ruins, 573 BC' },
+};
+export const MODE_PERIODS = { ez: ['late', 'ruin'], so: ['early', 'late'], overlay: ['late'] };
+export const DEFAULT_PERIOD = { ez: 'late', so: 'early', overlay: 'late' };
+const LATER = ['late', 'ruin'];
+
+// Solomon's temple terrace in the 10th century: the summit only (world metres).
+export const SOLOMON_PLATFORM = { x0: -45, x1: 125, z0: -70, z1: 136.5 };
+
+// --- Jerusalem landmarks ----------------------------------------------------------
 export const LANDMARKS = [
   { name: 'Mount of Olives', x: 820, z: -40, lift: 30 },
   { name: 'Kidron Valley', x: 255, z: -260, lift: 12 },
-  { name: 'City of David', x: 25, z: 560, lift: 26 },
+  { name: 'City of David', x: 25, z: 600, lift: 26 },
   { name: 'Ophel', x: 30, z: 360, lift: 22, hideIn: 'so' },
-  { name: 'Tyropoeon Valley', x: -190, z: 520, lift: 14 },
-  { name: 'Western Hill (Mishneh)', x: -500, z: 470, lift: 26 },
+  { name: 'Tyropoeon Valley', x: -190, z: 560, lift: 14 },
+  { name: 'Western Hill (Mishneh)', x: -500, z: 470, lift: 26, periods: LATER },
+  { name: 'Western Hill (fields)', x: -500, z: 470, lift: 22, periods: ['early'] },
   { name: 'Hinnom Valley', x: -560, z: 1010, lift: 14 },
-  { name: 'Gihon Spring', x: 112, z: 500, lift: 6 },
-  { name: 'Pool of Siloam', x: -100, z: 925, lift: 6 },
+  { name: 'Gihon Spring', x: 112, z: 500, lift: 14 },
   { name: 'En-rogel', x: -40, z: 1325, lift: 6 },
-  { name: 'Broad Wall', x: -370, z: 205, lift: 12 },
+  { name: 'King\'s Garden', x: -10, z: 1120, lift: 12 },
+  { name: 'Mount of Corruption', x: 610, z: 690, lift: 26 },
+  { name: 'Fields of the Kidron', x: 290, z: -620, lift: 10 },
+  { name: 'Maktesh (market quarter)', x: -190, z: 330, lift: 14, periods: ['late'] },
+  { name: 'Ketef Hinnom tombs', x: -700, z: 890, lift: 10, periods: LATER },
+  { name: 'Topheth', x: -230, z: 1250, lift: 8, periods: ['late'] },
 ];
 
 // Late Iron Age II city wall (approximate), from the Temple Mount round the
@@ -360,6 +598,68 @@ export const CITY_WALL = [
   [-730, 700], [-610, 900], [-420, 1010], [-230, 1070], [-125, 1005], [-40, 985],
   [20, 955], [70, 820], [95, 650], [100, 480], [115, 330], [140, 220], [175, 158],
 ];
+
+// The Broad Wall (Isa 22:10): CITY_WALL segments 1 and 2, about 7 m thick.
+export const BROAD_WALL = [1, 3];
+
+// 10th-century wall round the City of David and the Ophel (approximate).
+export const EARLY_WALL = [
+  [-45, 110], [-80, 190], [-105, 300], [-120, 450], [-118, 620], [-95, 790], [-55, 920],
+  [-5, 965], [30, 945], [70, 820], [95, 650], [100, 480], [115, 330], [122, 220], [125, 140],
+];
+
+// Named gates. Locations are approximate; see each info card.
+export const GATES = [
+  { id: 'gate-corner', name: 'Corner Gate', at: [-700, 172], periods: LATER },
+  { id: 'gate-ephraim', name: 'Gate of Ephraim', at: [-492, 190], periods: LATER },
+  { id: 'gate-fish', name: 'Fish Gate', at: [-262, 126], periods: LATER },
+  { id: 'gate-valley', name: 'Valley Gate', at: [-758, 470], periods: LATER },
+  { id: 'gate-dung', name: 'Dung Gate', at: [-325, 1040], periods: LATER },
+  { id: 'gate-fountain', name: 'Fountain Gate', at: [-82, 995], periods: LATER },
+  { id: 'gate-water', name: 'Water Gate', at: [99, 540], periods: ['early', 'late', 'ruin'] },
+  { id: 'gate-horse', name: 'Horse Gate', at: [152, 200], periods: LATER },
+  { id: 'gate-valley', name: 'Valley Gate', at: [-120, 520], periods: ['early'] },
+  { id: 'gate-fountain', name: 'Fountain Gate', at: [8, 957], periods: ['early'] },
+];
+
+// Roads leaving the gates (world x, z).
+const KIDRON_ROAD = [[-50, 1100], [-40, 1250], [-30, 1330], [40, 1800], [250, 2600], [700, 3600]];
+export const ROADS = [
+  { periods: ['early', 'late', 'ruin'], pts: [[99, 540], [150, 520], [260, 470], [420, 390], [620, 300], [820, 200], [1100, 170], [1500, 230], [2300, 420], [3200, 700]] },
+  { periods: LATER, pts: [[-492, 190], [-500, 40], [-540, -250], [-600, -700], [-650, -1300], [-720, -2400], [-760, -3500]] },
+  { periods: ['early'], pts: [[-50, 40], [-160, -60], [-400, -250], [-560, -450], [-620, -900], [-660, -1400], [-720, -2400], [-760, -3500]] },
+  { periods: LATER, pts: [[-700, 172], [-860, 150], [-1150, 90], [-1600, 60], [-2300, 100], [-3200, 180]] },
+  { periods: LATER, pts: [[-758, 470], [-900, 560], [-1080, 820], [-1280, 1200], [-1480, 1800], [-1700, 2700], [-1900, 3600]] },
+  { periods: ['early'], pts: [[-120, 520], [-200, 525], [-330, 560], [-520, 700], [-760, 820], [-1050, 880], [-1280, 1200], [-1480, 1800], [-1700, 2700]] },
+  { periods: LATER, pts: [[-82, 995], ...KIDRON_ROAD] },
+  { periods: ['early'], pts: [[8, 957], [-20, 1020], ...KIDRON_ROAD] },
+];
+
+// Main streets kept clear of houses inside the walls.
+export const STREETS = {
+  late: [
+    { w: 5, pts: [[-262, 140], [-228, 250], [-205, 400], [-188, 550], [-162, 700], [-132, 850], [-104, 960], [-82, 990]] },
+    { w: 4.5, pts: [[-758, 470], [-600, 462], [-450, 432], [-300, 405], [-205, 400]] },
+    { w: 4.5, pts: [[-492, 195], [-482, 350], [-470, 550], [-450, 750], [-385, 900], [-325, 1035]] },
+    { w: 4, pts: [[-700, 178], [-655, 300], [-600, 462]] },
+    { w: 4, pts: [[40, 150], [30, 300], [-22, 390], [-22, 470], [18, 560], [30, 700], [12, 850], [-30, 960], [-82, 990]] },
+    { w: 4, pts: [[96, 540], [60, 540], [22, 560]] },
+    { w: 4, pts: [[148, 200], [100, 200], [40, 180]] },
+  ],
+  early: [
+    { w: 4, pts: [[40, 150], [30, 300], [-22, 390], [-22, 470], [18, 560], [30, 700], [12, 850], [8, 950]] },
+    { w: 4, pts: [[96, 540], [60, 540], [22, 560]] },
+    { w: 4, pts: [[-116, 520], [-60, 520], [-22, 500]] },
+  ],
+};
+
+// Water and garden features (world x, z, size in metres).
+export const SILOAM_POOL = { x: -104, z: 920, w: 36, d: 18 };
+export const LOWER_POOL = { x: -72, z: 1035, w: 50, d: 30 };
+export const KINGS_GARDEN = { x: -30, z: 1120, rx: 150, rz: 105 };
+export const SSS = { x0: 34, z0: 410, z1: 452 };              // Stepped Stone Structure
+export const LSS = { x0: -6, x1: 32, z0: 396, z1: 448 };      // Large Stone Structure
+export const GIHON = { x: 114, z: 500 };
 
 // Ezekiel 48:31–34 — the city gates.
 export const CITY_GATES = {

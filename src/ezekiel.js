@@ -2,7 +2,7 @@
 // cubits: u = east, v = south, y = up from the precinct's base ground.
 // The precinct centre is the origin; the outer wall runs from -250 to +250.
 import * as THREE from 'three';
-import { Builder } from './builder.js';
+import { Builder, aeolicCapital } from './builder.js';
 import { CUBIT, LEVEL, EZ_CENTER_X, BASE_Y, CITY_GATES } from './data.js';
 import { terrainY } from './terrain.js';
 
@@ -59,6 +59,14 @@ function gate(bld, o) {
     for (const [a0, a1] of [[8, 10], [19, 21], [30, 32], [43, 45]]) {    // narrow windows (40:16)
       P('window', a0, a1, s * 13.5, s * 13.62, floor + 9, floor + 15);
     }
+  }
+  // Proto-Aeolic capitals crown the palm-tree pilasters. The Iron Age volute
+  // capital is often read as a stylised palm (40:16).
+  for (const planA of [0, 50]) for (const s of [-1, 1]) {
+    const outward = (planA === 50 ? 1 : -1) * (porchOut ? -1 : 1);
+    const a = (porchOut ? 50 - planA : planA) + outward * 0.15;
+    const b = s * 9.75;
+    bld.geom('ashlar', aeolicCapital(5.2), u0 + du * a + lu * b, floor + 13, v0 + dv * a + lv * b, Math.atan2(du * outward, dv * outward));
   }
   P('ashlar', 48, 50, -6.5, 6.5, floor + 14, top);   // lintel over the vestibule opening
   P('ashlar', 0, 1.5, -6.5, 6.5, floor + 14, top);   // lintel over the entrance
@@ -361,7 +369,8 @@ export function buildEzekiel(mats) {
   altarLight.position.set(0, I + 15, 0);
   group.add(altarLight);
 
-  return { group, zones, labels, fireMeshes, altarLight };
+  const hearths = fires.filter((f) => !f.big).map((f) => toWorld(f.u, f.y, f.v));
+  return { group, zones, labels, fireMeshes, altarLight, altarTop: toWorld(0, I + 11, 0), hearths };
 }
 
 // ---------------------------------------------------------------------------

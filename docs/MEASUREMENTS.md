@@ -223,9 +223,9 @@ The text does not give these, so the model fills them in. Each is shown on its i
 | Height of the gates | 20 cubits | 40:14 is obscure; LXX reads 20 |
 | Size of the 30 chambers | 30 × 20 | Not given |
 | Height of the western building | 20 cubits | Not given |
-| Solomon's courts | inner 200 × 100; great court = the 500-cubit square | Not given; tabernacle court doubled; Mishnah, Middot 2:1 |
+| Solomon's courts | inner 200 × 100; great court = the summit terrace (c. 950 BC) or the 500-cubit square (c. 600 BC) | Not given; tabernacle court doubled; Mishnah, Middot 2:1 |
 | Solomon's wall thickness | 6 cubits | Not given; as Ezekiel |
 | Platform levels of Solomon's house | as Ezekiel's | Not given |
 | Palace layout | Forest House, Hall of Pillars, Throne Hall, palace, south of the temple | Order of 1 Kgs 7:1–12; sizes not given except where stated |
 | Jerusalem terrain | approximate | Valleys and heights from published elevations, not a survey |
-| City wall | late Iron Age II line | Simplified from excavated segments (Broad Wall, City of David) |
+| City, walls, gates and countryside | per period | See [HISTORY.md](HISTORY.md) for sources and confidence |

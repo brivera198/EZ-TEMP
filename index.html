@@ -55,6 +55,10 @@ button:focus-visible, input:focus-visible, select:focus-visible { outline: 2px s
 .label.so::before { background: var(--lapis); }
 .label.river::before { background: #6cc4d0; }
 .label.reeds::before { background: #e0604f; }
+.label.city::before { background: #c98b5a; }
+.label.man::before { background: #b9824a; }
+.label.has-info { pointer-events: auto; cursor: pointer; }
+.label.has-info:hover { border-color: var(--accent); }
 
 /* Brand + mode switch */
 .brand {
@@ -73,6 +77,13 @@ button:focus-visible, input:focus-visible, select:focus-visible { outline: 2px s
   font-size: 13.5px; font-weight: 500; color: var(--muted); white-space: nowrap;
 }
 .modes button[aria-pressed="true"] { background: var(--accent); color: #17130b; }
+.periods { display: inline-flex; gap: 2px; background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 2px; backdrop-filter: blur(8px); align-self: flex-start; }
+.periods[hidden] { display: none; }
+.periods button {
+  border: 0; background: transparent; padding: 4px 10px; border-radius: 6px; cursor: pointer;
+  font: 500 12.5px/1.2 var(--font-mono); color: var(--muted); white-space: nowrap; font-variant-numeric: tabular-nums;
+}
+.periods button[aria-pressed="true"] { background: rgba(236, 227, 207, 0.16); color: var(--stone); box-shadow: inset 0 -2px 0 var(--accent); }
 .chip {
   align-self: flex-start; border: 1px solid var(--line); background: var(--panel); border-radius: 999px;
   padding: 4px 11px; font-size: 12.5px; color: var(--muted); cursor: pointer; backdrop-filter: blur(8px);
@@ -86,7 +97,7 @@ body.panels-hidden #views, body.panels-hidden #info { display: none; }
   backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
   overflow: auto; overscroll-behavior: contain;
 }
-#views { top: calc(178px + env(safe-area-inset-top, 0px)); left: calc(14px + env(safe-area-inset-left, 0px)); width: 248px; max-height: calc(100% - 240px); padding: 12px; }
+#views { top: calc(214px + env(safe-area-inset-top, 0px)); left: calc(14px + env(safe-area-inset-left, 0px)); width: 248px; max-height: calc(100% - 276px); padding: 12px; }
 #info { top: calc(14px + env(safe-area-inset-top, 0px)); right: calc(14px + env(safe-area-inset-right, 0px)); width: 370px; max-height: calc(100% - 80px); display: flex; flex-direction: column; overflow: hidden; }
 .panel h3 {
   margin: 0 0 6px; font: 600 11px/1 var(--font-mono); text-transform: uppercase; letter-spacing: 0.12em; color: var(--muted);
@@ -203,6 +214,11 @@ body.walking #walkpad.touch { display: grid; }
       <button type="button" data-mode="so" aria-pressed="false">Solomon</button>
       <button type="button" data-mode="overlay" aria-pressed="false">Overlay</button>
     </div>
+    <div class="periods" role="group" aria-label="Period">
+      <button type="button" data-period="early" aria-pressed="false">c. 950 BC</button>
+      <button type="button" data-period="late" aria-pressed="true">c. 600 BC</button>
+      <button type="button" data-period="ruin" aria-pressed="false">573 BC</button>
+    </div>
     <button type="button" class="chip" id="toggle-panels" aria-pressed="false">Hide panels</button>
   </header>
 
@@ -218,7 +234,8 @@ body.walking #walkpad.touch { display: grid; }
     <div class="section layers">
       <h3>Layers</h3>
       <label><input type="checkbox" id="lyr-labels" checked> Labels</label>
-      <label><input type="checkbox" id="lyr-city" checked> City before 586 BC</label>
+      <label><input type="checkbox" id="lyr-city" checked> <span id="lyr-city-label">City and countryside</span></label>
+      <label><input type="checkbox" id="lyr-life" checked> People and animals</label>
       <label class="ez-only"><input type="checkbox" id="lyr-river" checked> River <span class="ref">47:1–12</span></label>
       <label class="ez-only"><input type="checkbox" id="lyr-migrash" checked> Open land <span class="ref">45:2</span></label>
       <label class="ez-only"><input type="checkbox" id="lyr-reeds"> "500 reeds" <span class="ref">42:16</span></label>
@@ -242,7 +259,7 @@ body.walking #walkpad.touch { display: grid; }
     <div class="tab-body" id="pane-cmp" role="tabpanel" hidden></div>
   </aside>
 
-  <div id="hint">Drag to look around · right-drag to pan · scroll to zoom · click a building for its measurements</div>
+  <div id="hint">Drag to look around · right-drag to pan · scroll to zoom · click anything for its sources</div>
   <div class="mobile-bar">
     <button type="button" data-open="views" aria-expanded="false">Views</button>
     <button type="button" data-open="info" aria-expanded="false">Measurements</button>

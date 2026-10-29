@@ -109,31 +109,34 @@ function flagstones(seed, base, size = 512) {
   return [toTex(c), toTex(cb, false)];
 }
 
-// Rough fieldstone for city walls.
-function rubble(seed, base, size = 512) {
+// Rough fieldstone: city walls, terraces, and (with large stones) the
+// megalithic masonry of the City of David.
+function rubble(seed, base, { size = 512, count = 260, rx = [14, 44], ry = [10, 28], joint = 0.6 } = {}) {
   const rand = rng(seed);
   const [c, g] = canvas(size, size);
   const [cb, b] = canvas(size, size);
-  g.fillStyle = rgb(base[0] * 0.5, base[1] * 0.5, base[2] * 0.5);
+  g.fillStyle = rgb(base[0] * joint, base[1] * joint, base[2] * joint);
   g.fillRect(0, 0, size, size);
   b.fillStyle = '#202020';
   b.fillRect(0, 0, size, size);
-  for (let i = 0; i < 260; i++) {
+  for (let i = 0; i < count; i++) {
     const x = rand() * size, y = rand() * size;
-    const rx = 14 + rand() * 30, ry = 10 + rand() * 18;
-    const k = 0.8 + rand() * 0.3;
+    const ex = rx[0] + rand() * (rx[1] - rx[0]), ey = ry[0] + rand() * (ry[1] - ry[0]);
+    const k = 0.84 + rand() * 0.26;
+    const rot = rand() * 0.4;
     for (const [ox, oy] of [[0, 0], [size, 0], [-size, 0], [0, size], [0, -size]]) {
       g.fillStyle = rgb(base[0] * k, base[1] * k, base[2] * k);
       g.beginPath();
-      g.ellipse(x + ox, y + oy, rx, ry, rand() * 0.4, 0, Math.PI * 2);
+      g.ellipse(x + ox, y + oy, ex, ey, rot, 0, Math.PI * 2);
       g.fill();
       b.fillStyle = `rgb(${150 + rand() * 60 | 0},${150 + rand() * 60 | 0},${150 + rand() * 60 | 0})`;
       b.beginPath();
-      b.ellipse(x + ox, y + oy, rx, ry, 0, 0, Math.PI * 2);
+      b.ellipse(x + ox, y + oy, ex, ey, rot, 0, Math.PI * 2);
       b.fill();
     }
   }
   speckle(g, size, size, 2500, rand, '#2e2820');
+  speckle(g, size, size, 1200, rand, '#f4ead8');
   return [toTex(c), toTex(cb, false)];
 }
 
@@ -401,7 +404,9 @@ export function makeMaterials() {
   const [ashDMap, ashDBump] = ashlar(2, [196, 178, 146], { minLen: 2.2, maxLen: 4.2 });
   const [podMap, podBump] = ashlar(9, [205, 190, 158], { minLen: 2.5, maxLen: 5 });
   const [paveMap, paveBump] = flagstones(4, [214, 200, 170]);
-  const [rubMap, rubBump] = rubble(5, [184, 166, 134]);
+  const [rubMap, rubBump] = rubble(5, [196, 180, 150], { joint: 0.66 });
+  const [terMap, terBump] = rubble(15, [206, 194, 168], { joint: 0.72, count: 300 });
+  const [megMap, megBump] = rubble(16, [212, 200, 174], { joint: 0.7, count: 70, rx: [34, 72], ry: [24, 46] });
   const [cedarMap, cedarBump] = carvedPanel('cedar');
   const [goldMap, goldBump] = carvedPanel('gold');
   const [palmMap, palmBump] = carvedPanel('stone');
@@ -436,7 +441,15 @@ export function makeMaterials() {
     ember: new THREE.MeshStandardMaterial({ color: 0x2a1408, emissive: 0xff5a10, emissiveIntensity: 1.6, roughness: 1 }),
     linen: std({ color: 0xf1ebdc, roughness: 1 }, 4),
     terrain: new THREE.MeshStandardMaterial({ map: groundDetail(), vertexColors: true, roughness: 0.97 }),
-    house: new THREE.MeshStandardMaterial({ map: mottled(12, [204, 184, 152], 0.16), roughness: 1 }),
+    house: new THREE.MeshStandardMaterial({ map: mottled(12, [222, 212, 196], 0.14), roughness: 1, vertexColors: true }),
+    terraceStone: std({ map: terMap, bumpMap: terBump, bumpScale: 1.5, roughness: 0.95 }, 4),
+    megalith: std({ map: megMap, bumpMap: megBump, bumpScale: 2.5, roughness: 0.95 }, 10),
+    void: std({ color: 0x120d0a, roughness: 1 }, 2),
+    shield: std({ color: 0x7a4e26, metalness: 0.55, roughness: 0.5 }, 1),
+    straw: std({ color: 0xc9a650, roughness: 1 }, 2),
+    figure: new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.95, vertexColors: true }),
+    skin: new THREE.MeshStandardMaterial({ color: 0x8a5d40, roughness: 0.8 }),
+    animal: new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 1, vertexColors: true }),
     olive: new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.9, flatShading: true }),
     trunk: new THREE.MeshStandardMaterial({ color: 0x5a4a38, roughness: 1 }),
     ghost: new THREE.MeshBasicMaterial({ color: 0x5b8fe6, transparent: true, opacity: 0.16, depthWrite: false, side: THREE.DoubleSide }),
