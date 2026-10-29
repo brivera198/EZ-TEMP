@@ -214,8 +214,9 @@ export const INFO = {
   },
   'so-nave': {
     mode: 'so', title: 'Nave (Holy Place)', he: 'הֵיכָל',
-    dims: ['40 × 20 cubits, 30 high', 'Cedar walls, cypress floor, all overlaid with gold', 'Carved gourds, open flowers, cherubim, palm trees', 'Cypress doors, two folding leaves each'],
-    refs: '1 Kgs 6:15–18, 22, 29–35', note: ''
+    dims: ['40 × 20 cubits, 30 high', 'Cedar walls, cypress floor, all overlaid with gold', 'Carved gourds, open flowers, cherubim, palm trees', 'Cypress doors, two folding leaves each, overlaid with gold'],
+    refs: '1 Kgs 6:15–18, 22, 29–35; 2 Kgs 18:16',
+    note: 'Hezekiah stripped the gold from the doors and doorposts to pay tribute to Sennacherib (701 BC), so the later views show bare carved wood.'
   },
   'so-lamps': {
     mode: 'so', title: 'Ten golden lampstands', he: 'מְנֹרוֹת',
@@ -262,19 +263,19 @@ export const INFO = {
   'so-sea': {
     mode: 'so', title: 'The bronze Sea', he: 'הַיָּם מוּצָק',
     dims: ['10 cubits across, brim to brim (5.25 m)', '5 cubits high; 30 cubits round', 'A handbreadth thick, lily-shaped brim', 'On 12 oxen, 3 facing each direction', 'Held 2,000 baths (2 Chr 4:5: 3,000)'],
-    refs: '1 Kgs 7:23–26, 39; 2 Chr 4:2–6',
-    note: 'Set at the south-east of the house. The priests washed in it.'
+    refs: '1 Kgs 7:23–26, 39; 2 Chr 4:2–6; 2 Kgs 16:17; 25:13',
+    note: 'Set at the south-east of the house. The priests washed in it. King Ahaz (c. 730 BC) took it off the oxen and set it "on a pavement of stones", as shown for c. 600 BC. Jer 52:20 still lists the twelve oxen among the bronze taken in 586 BC, so they may have been kept or restored. The Babylonians broke the Sea up and carried the bronze to Babylon.'
   },
   'so-lavers': {
     mode: 'so', title: 'Ten bronze stands with basins', he: 'מְכֹנוֹת · כִּיֹּרוֹת',
     dims: ['Each stand 4 × 4 cubits, 3 high', '4 wheels 1½ cubits high', 'Each basin 4 cubits, holding 40 baths', '5 on the south side, 5 on the north'],
-    refs: '1 Kgs 7:27–39; 2 Chr 4:6', note: 'For washing the parts of the burnt offerings.'
+    refs: '1 Kgs 7:27–39; 2 Chr 4:6; 2 Kgs 16:17', note: 'For washing the parts of the burnt offerings. Ahaz cut off their side panels and removed the basins, so the c. 600 BC view shows bare frames on wheels.'
   },
   'so-altar': {
     mode: 'so', title: 'Bronze altar', he: 'מִזְבַּח הַנְּחֹשֶׁת',
     dims: ['20 × 20 cubits, 10 high (10.5 × 10.5 × 5.25 m)'],
-    refs: '2 Chr 4:1; 1 Kgs 8:64',
-    note: 'How it was climbed is not stated. The model uses a ramp on the south (Exod 20:26 forbids steps).'
+    refs: '2 Chr 4:1; 1 Kgs 8:64; 2 Kgs 16:14–15',
+    note: 'How it was climbed is not stated. The model uses a ramp on the south (Exod 20:26 forbids steps). Ahaz moved it to the north side of his new altar and kept it "to inquire by" (2 Kgs 16:15).'
   },
   'so-inner-court': {
     mode: 'so', title: 'Inner court (court of the priests)', he: 'הֶחָצֵר הַפְּנִימִית',
@@ -319,12 +320,67 @@ export const INFO = {
     note: 'Leen Ritmeyer dates this square to King Hezekiah (about 700 BC); its date is debated. The retaining walls are a reconstruction.'
   },
 
+  'so-altar-ahaz': {
+    mode: 'so', title: 'Altar of Ahaz ("the great altar")', he: 'הַמִּזְבֵּחַ הַגָּדוֹל',
+    dims: ['Copied from an altar Ahaz saw in Damascus (c. 732 BC)', 'Set in front of the house; the bronze altar moved to its north side', 'Size and form not given; modelled 22 × 22 cubits in three stages, 10 high'],
+    refs: '2 Kgs 16:10–16',
+    note: 'From then on the daily burnt offerings were made on it. This is the altar of the temple Ezekiel knew as a priest. Some scholars think his stepped altar (Ezek 43:13–17) echoes it.'
+  },
+  'so-upper-gate': {
+    mode: 'so', title: 'Upper Gate', he: 'שַׁעַר בֵּית יְהוָה הָעֶלְיוֹן',
+    dims: ['Built by Jotham (c. 750–735 BC)', 'On the north side of the raised inner court; size not given'],
+    refs: '2 Kgs 15:35; Jer 20:2; 36:10; Ezek 8:3–5; 9:2',
+    note: 'Jeremiah was put in the stocks at "the upper Benjamin gate". In Ezekiel\'s vision of the temple in 592 BC the "image of jealousy" stood at the north gate of the inner court.'
+  },
+  'so-ruin': {
+    mode: 'so', title: 'The house of the LORD in ruins', he: 'חָרְבַּן הַבַּיִת',
+    dims: ['Burned on the 7th (Jer 52:12: 10th) of the 5th month, 586 BC', 'Fourteen years later, Ezekiel\'s vision (40:1)', 'Cedar roof, panelling and gold gone; stone walls broken and blackened'],
+    refs: '2 Kgs 25:8–17; Jer 52:12–23; Lam 2:6–9; Ps 74:3–8; Ezek 33:21',
+    note: 'How much of the walls still stood is not recorded; the heights here are a reconstruction. Men from the north still brought offerings "to the house of the LORD" after the fall (Jer 41:5).'
+  },
+  'so-ruin-bronze': {
+    mode: 'so', title: 'The bronze carried to Babylon', he: 'נְחֹשֶׁת',
+    dims: ['Jachin and Boaz, the Sea and the stands broken up', '"The bronze of all these vessels was beyond weight"'],
+    refs: '2 Kgs 25:13–17; Jer 52:17–23; 27:19–22',
+    note: 'Jeremiah had warned that the pillars, the Sea and the stands left behind in 597 BC would follow the rest to Babylon.'
+  },
+  'so-ruin-altar': {
+    mode: 'so', title: 'The altar court in ruins', he: 'מִזְבֵּחַ',
+    dims: ['The bronze altar is gone; only the base of the stone altar is shown'],
+    refs: 'Lam 2:7; Jer 41:5; Ezra 3:2–3',
+    note: '"The Lord has scorned his altar, disowned his sanctuary" (Lam 2:7). The returning exiles rebuilt the altar "on its foundation" about 537 BC.'
+  },
+  'so-ruin-palace': {
+    mode: 'so', title: 'The burned palace', he: 'בֵּית הַמֶּלֶךְ',
+    dims: ['"He burned the house of the LORD and the king\'s house"'],
+    refs: '2 Kgs 25:9; Jer 39:8; 52:13',
+    note: 'The palace buildings are reconstructions (see the c. 950 BC view); their ruins are too.'
+  },
+
   // City and countryside ---------------------------------------------------
   'land-judah': {
     mode: 'both', title: 'Judean hill country', he: 'הַר יְהוּדָה',
     dims: ['Terraced slopes of red terra rossa soil over limestone', 'Wheat, barley, vines, figs, pomegranates, olives (Deut 8:8)', 'Rain-fed: about 550 mm a year in Jerusalem'],
     refs: 'Deut 8:7–10; Isa 5:1–2; Jer 32:15',
     note: 'Dry-stone terraces turned the steep hills into fields and orchards. East of the Mount of Olives the land drops into the Judean desert.'
+  },
+  'land-rock': {
+    mode: 'both', title: 'Limestone of the hills', he: 'סֶלַע',
+    dims: ['Hard limestone and dolomite with a weathered crust (nari)', 'Bedrock steps out along the contours; boulders lie loose', 'The building stone of Jerusalem in every period'],
+    refs: 'Deut 8:9; Isa 5:2; 1 Kgs 5:17',
+    note: 'Fields were cleared of stones before planting (Isa 5:2) and the stones built into the terrace walls, so rock shows mostly on the steep, uncultivated slopes.'
+  },
+  'land-scrub': {
+    mode: 'both', title: 'Thorny scrub (batha)', he: 'שָׁמִיר וָשַׁיִת',
+    dims: ['Low cushions of thorny burnet, thyme, sage and rockrose', 'Grazed by sheep and goats; cut for fuel'],
+    refs: 'Isa 5:6; 7:23–25; Hos 10:8',
+    note: 'The prophets\' "briers and thorns" take over a vineyard or field that is left untended.'
+  },
+  'city-jackal': {
+    mode: 'both', title: 'Jackals on Mount Zion', he: 'שׁוּעָלִים',
+    dims: ['Golden jackals, common in the hills'],
+    refs: 'Lam 5:18; Jer 9:11; Ezek 13:4',
+    note: '"For Mount Zion, which lies desolate; jackals prowl over it." The temple courts were left to weeds and wild animals after 586 BC.'
   },
   'city-house': {
     mode: 'both', title: 'Four-room house', he: 'בַּיִת',
@@ -533,7 +589,7 @@ export const INFO = {
 
 // --- Comparison table --------------------------------------------------------
 export const COMPARE = [
-  ['Source', 'Ezek 40–48: a vision dated 573 BC, 14 years after the fall of the city (40:1)', '1 Kgs 6–7; 2 Chr 3–4. Built c. 966–959 BC, burned 586 BC'],
+  ['Source', 'Ezek 40–48: a vision dated 573 BC, 14 years after the fall of the city (40:1)', '1 Kgs 6–7; 2 Chr 3–4. Built c. 966–959 BC, altered by Jotham, Ahaz and Hezekiah (2 Kgs 15–18), burned 586 BC'],
   ['Cubit', 'Long cubit: cubit + handbreadth = 52.5 cm (40:5; 43:13)', '"Cubits of the first measure" (2 Chr 3:3); same long cubit assumed'],
   ['Precinct', 'Walled square 500 × 500 cubits, plus 50 cubits open land (42:15–20; 45:2)', 'No overall size given; a "great court" encloses temple and palace (7:12)'],
   ['Courts', 'Outer and inner court on rising terraces: 7 steps, then 8', 'Inner court of 3 stone courses + cedar beam (6:36); sizes not given'],
@@ -547,8 +603,8 @@ export const COMPARE = [
   ['Side chambers', '4 cubits wide, 3 storeys, 30 per storey (41:5–6)', '5, 6 and 7 cubits wide by storey, each 5 high (6:5–10)'],
   ['Platform', '6 cubits high, 10 steps (41:8; 40:49 LXX)', 'Not stated'],
   ['Pillars', '"Pillars by the jambs", no detail (40:49)', 'Jachin and Boaz: bronze, 18 cubits + 5-cubit capitals (7:15–22)'],
-  ['Altar', 'Stepped, 18 → 12 cubits square, ≈ 11 high, steps on the east (43:13–17)', 'Bronze, 20 × 20 × 10 cubits (2 Chr 4:1)'],
-  ['Water', 'A river flows from under the threshold to the Dead Sea (47:1–12)', 'The bronze Sea on 12 oxen and 10 basins on wheeled stands (7:23–39)'],
+  ['Altar', 'Stepped, 18 → 12 cubits square, ≈ 11 high, steps on the east (43:13–17)', 'Bronze, 20 × 20 × 10 cubits (2 Chr 4:1). From c. 732 BC Ahaz\'s "great altar" stood in front, the bronze altar moved to its north (2 Kgs 16:10–15)'],
+  ['Water', 'A river flows from under the threshold to the Dead Sea (47:1–12)', 'The bronze Sea on 12 oxen and 10 basins on wheeled stands (7:23–39). Ahaz set the Sea on stones and removed the basins (2 Kgs 16:17)'],
   ['Furniture', 'One wooden altar-table, 3 high, 2 long (41:22)', 'Golden incense altar, table, 10 lampstands (7:48–49)'],
   ['Decoration', 'Wood panelling; two-faced cherubim (man and lion) alternating with palms (41:17–20)', 'Cedar carved with cherubim, palms, flowers, all overlaid with gold (6:29–35)'],
   ['Royal palace', 'Kept away: "their threshold by my threshold" defiled the house (43:7–9)', 'Palace complex directly south, inside the same great court (7:1–12)'],
@@ -560,12 +616,10 @@ export const COMPARE = [
 // early: Solomon's Jerusalem. late: the last years of the kingdom of Judah.
 // ruin: the year of Ezekiel's vision, 14 years after the city fell (Ezek 40:1).
 export const PERIODS = {
-  early: { short: 'c. 950 BC', title: 'Solomon\'s Jerusalem, c. 950 BC' },
-  late: { short: 'c. 600 BC', title: 'Jerusalem before the fall, c. 600 BC' },
-  ruin: { short: '573 BC', title: 'Jerusalem in ruins, 573 BC' },
+  early: { short: 'c. 950 BC', name: 'Solomon\'s time', title: 'Solomon\'s Jerusalem, c. 950 BC' },
+  late: { short: 'c. 600 BC', name: 'Ezekiel\'s time', title: 'Jerusalem in Ezekiel\'s time, c. 600 BC' },
+  ruin: { short: '573 BC', name: 'After the fall', title: 'Jerusalem in ruins, 573 BC' },
 };
-export const MODE_PERIODS = { ez: ['late', 'ruin'], so: ['early', 'late'], overlay: ['late'] };
-export const DEFAULT_PERIOD = { ez: 'late', so: 'early', overlay: 'late' };
 const LATER = ['late', 'ruin'];
 
 // Solomon's temple terrace in the 10th century: the summit only (world metres).
@@ -576,7 +630,7 @@ export const LANDMARKS = [
   { name: 'Mount of Olives', x: 820, z: -40, lift: 30 },
   { name: 'Kidron Valley', x: 255, z: -260, lift: 12 },
   { name: 'City of David', x: 25, z: 600, lift: 26 },
-  { name: 'Ophel', x: 30, z: 360, lift: 22, hideIn: 'so' },
+  { name: 'Ophel', x: 30, z: 360, lift: 22, hideWithPalace: true },
   { name: 'Tyropoeon Valley', x: -190, z: 560, lift: 14 },
   { name: 'Western Hill (Mishneh)', x: -500, z: 470, lift: 26, periods: LATER },
   { name: 'Western Hill (fields)', x: -500, z: 470, lift: 22, periods: ['early'] },

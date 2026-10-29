@@ -192,12 +192,20 @@ export function buildLife(mats, ctx) {
 
   // Solomon's temple: priests, Levite singers east of the altar (2 Chr 5:12),
   // the people in the great court, guards and officials at the palace.
+  // c. 600 BC the altar of Ahaz stands in front, the bronze altar to its north.
   const soHouse = S(20, 0, 0);
-  const soInnerOK = (u, v) => !(u >= -30 && u <= 90 && Math.abs(v) <= 30) && !(u >= 106 && u <= 130 && v >= -12 && v <= 32)
+  const soCommonOK = (u, v) => !(u >= -30 && u <= 90 && Math.abs(v) <= 30)
     && !(u >= 59 && u <= 73 && v >= 31 && v <= 45) && !(Math.abs(v) >= 30 && Math.abs(v) <= 38 && u >= -3 && u <= 51);
-  groups.soFolk = people(mats, [
-    ...scatter(26, box(-36, 156, -46, 46), soInnerOK, (u, v) => S(u, I, v), () => LINEN, faceTo(soHouse.x, soHouse.z)),
+  const soEarlyOK = (u, v) => soCommonOK(u, v) && !(u >= 106 && u <= 130 && v >= -12 && v <= 32);
+  const soLateOK = (u, v) => soCommonOK(u, v) && !(u >= 123 && u <= 149 && v >= -13 && v <= 33)
+    && !(u >= 124 && u <= 148 && v >= -43 && v <= -19) && !(u >= 48 && u <= 72 && v <= -40);
+  groups.soFolkEarly = people(mats, [
+    ...scatter(26, box(-36, 156, -46, 46), soEarlyOK, (u, v) => S(u, I, v), () => LINEN, faceTo(soHouse.x, soHouse.z)),
     ...scatter(14, box(132, 152, -20, 20), () => true, (u, v) => S(u, I, v), () => LINEN, faceTo(S(118, 0, 0).x, 0)),
+  ]);
+  groups.soFolkLate = people(mats, [
+    ...scatter(26, box(-36, 156, -46, 46), soLateOK, (u, v) => S(u, I, v), () => LINEN, faceTo(soHouse.x, soHouse.z)),
+    ...scatter(12, box(98, 120, 18, 44), () => true, (u, v) => S(u, I, v), () => LINEN, faceTo(S(136, 0, 0).x, 0)),
   ]);
   const court = (u0, u1, v0, v1) => (u, v) => !(u >= -44 && u <= 172 && Math.abs(v) <= 54) && u > u0 && u < u1 && v > v0 && v < v1;
   groups.soCourtLate = people(mats, scatter(140, box(-115, 365, -240, 240), court(-115, 365, -240, 240), (u, v) => S(u, O, v), dress, faceTo(soHouse.x, soHouse.z)));
@@ -279,6 +287,15 @@ export function buildLife(mats, ctx) {
   groups.smokeEz = smoke([ctx.ezAltar], { big: true, rand });
   groups.smokeEzKitchens = smoke(ctx.ezHearths.filter((_, i) => i % 4 === 0), { rand });
   groups.smokeSo = smoke([ctx.soAltar], { big: true, rand });
+  groups.smokeSoLate = smoke([ctx.soAltarLate], { big: true, rand });
+
+  // 573 BC: "Mount Zion, which lies desolate; jackals prowl over it" (Lam 5:18).
+  const jackals = animals(mats, [[230, -60, 0.4], [238, -52, 2.2], [200, 120, 4.1], [-90, -150, 1.2]].map(([u, v, rot]) => {
+    const p = S(u, O, v);
+    return { x: p.x, y: p.y, z: p.z, rot, col: [0.6, 0.47, 0.32], sx: 0.8, sy: 0.72, sz: 0.55 };
+  }));
+  jackals.userData.infoId = 'city-jackal';
+  groups.ruinLife = jackals;
   groups.smokeLate = smoke(ctx.smoke.late, { rand });
   groups.smokeEarly = smoke(ctx.smoke.early, { rand });
 

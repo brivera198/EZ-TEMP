@@ -1,13 +1,22 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { Sky } from 'three/addons/objects/Sky.js';
-import { INFO, COMPARE, LANDMARKS, CUBIT, BASE_Y, LEVEL, PERIODS, MODE_PERIODS, DEFAULT_PERIOD } from './data.js';
+import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
+import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
+import { GTAOPass } from 'three/addons/postprocessing/GTAOPass.js';
+import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
+import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
+import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
+import { INFO, COMPARE, LANDMARKS, CUBIT, BASE_Y, LEVEL, PERIODS } from './data.js';
 import { makeMaterials } from './materials.js';
-import { buildTerrain, terrainY, applySite, installTerrainShader, paintOverlay } from './terrain.js';
+import { buildTerrain, terrainY, applySite, installTerrainShader, paintOverlay, PODIUM } from './terrain.js';
 import { buildCity, planCountryside } from './city.js';
 import { buildLife } from './life.js';
+import { buildNature, overgrowth } from './nature.js';
 import { buildEzekiel, buildRiver, buildReedsOutline, buildMigrash, buildCityOfEzekiel, toWorld as E } from './ezekiel.js';
 import { buildSolomon, buildPlatforms } from './solomon.js';
+import { makeVisionLooks, VISION_PARTS } from './vision.js';
+import { atmo, patchScene, clouds, buildClouds } from './atmosphere.js';
 
 const $ = (s) => document.querySelector(s);
 const V = (x, y, z) => new THREE.Vector3(x, y, z);
@@ -16,21 +25,27 @@ const { outer: O, inner: I, house: H } = LEVEL;
 const EYE = 1.65 / CUBIT;                                          // eye height in cubits
 const tick = () => new Promise((r) => setTimeout(r, 0));
 const coarse = matchMedia('(pointer: coarse)').matches;
-// Lighter geometry for phones and small machines.
-const QUALITY = new URLSearchParams(location.search).get('quality')
-  || (coarse || (navigator.hardwareConcurrency || 8) <= 4 ? 'low' : 'high');
+const params = new URLSearchParams(location.search);
+// Lighter geometry and no screen effects on phones and small machines.
+const QUALITY = params.get('quality') || (coarse || (navigator.hardwareConcurrency || 8) <= 4 ? 'low' : 'high');
+// Screen effects: 'on', 'off', or 'auto' (dropped if the frame rate suffers).
+const FX = params.get('fx') || (QUALITY === 'low' ? 'off' : 'auto');
+const PERIOD_KEYS = ['early', 'late', 'ruin'];
+if (QUALITY === 'low') clouds.cloudOn.value = 0;   // cloud shadows cost a little on every lit pixel
 
 // --- Renderer, scene, camera ----------------------------------------------------
 const canvas = $('#scene');
-const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, logarithmicDepthBuffer: true, powerPreference: 'high-performance' });
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' });
 renderer.setPixelRatio(Math.min(devicePixelRatio, coarse ? 1.5 : 2));
 renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
-renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMapping = params.get('tone') === 'agx' ? THREE.AgXToneMapping : THREE.ACESFilmicToneMapping;
 renderer.outputColorSpace = THREE.SRGBColorSpace;
 
 const scene = new THREE.Scene();
-const camera = new THREE.PerspectiveCamera(50, 1, 0.15, 60000);
+// The near plane follows the camera's distance from things (see frame()), so
+// a standard depth buffer covers both the ark and the hills of Moab.
+const camera = new THREE.PerspectiveCamera(50, 1, 0.5, 90000);
 camera.position.set(360, 330, 820);
 const controls = new OrbitControls(camera, canvas);
 controls.enableDamping = true;
@@ -48,6 +63,13 @@ const envScene = new THREE.Scene();
 const envSky = new Sky();
 envSky.scale.setScalar(50);
 envScene.add(envSky);
+// The sun disk is bright enough to overflow half-float buffers, and anything
+// metal reflecting it would bloom into a white blot: cap it.
+const capSky = (s, max) => {
+  s.material.fragmentShader = s.material.fragmentShader.replace('gl_FragColor = vec4( retColor, 1.0 );', `gl_FragColor = vec4( min( retColor, vec3( ${max.toFixed(1)} ) ), 1.0 );`);
+};
+capSky(sky, 300);
+capSky(envSky, 20);
 for (const s of [sky, envSky]) {
   const u = s.material.uniforms;
   u.turbidity.value = 5.5;
@@ -68,9 +90,10 @@ sun.shadow.camera.far = 4000;
 scene.add(sun, sun.target);
 const hemi = new THREE.HemisphereLight(0xc4d6ee, 0x8c6c4a, 0.6);
 scene.add(hemi);
-scene.fog = new THREE.FogExp2(0xcfd6dc, 0.00009);
+scene.fog = new THREE.FogExp2(0xcfd6dc, 6e-5);
 
 const sunDir = new THREE.Vector3();
+const EXPOSURE = renderer.toneMapping === THREE.AgXToneMapping ? 0.9 : 0.58;
 function setTime(hours) {
   const t = (hours - 6) / 12;
   const el = Math.max(-0.03, Math.sin(t * Math.PI) * THREE.MathUtils.degToRad(64));
@@ -81,8 +104,14 @@ function setTime(hours) {
   sun.intensity = 3.2 * THREE.MathUtils.smoothstep(el, -0.02, 0.12);
   sun.color.setHSL(0.09, 0.75, 0.62 + 0.3 * day);
   hemi.intensity = 0.22 + 0.35 * day;
-  renderer.toneMappingExposure = 0.55 + 0.15 * (1 - day);
-  scene.fog.color.setHSL(0.09, 0.25 - 0.12 * day, 0.45 + 0.35 * day);
+  renderer.toneMappingExposure = EXPOSURE * (1 + 0.25 * (1 - day));
+  // Haze: warm and thicker at dawn and dusk, glowing toward the sun.
+  // Bluish by day (aerial perspective), warm at dawn and dusk.
+  scene.fog.color.setHSL(THREE.MathUtils.lerp(0.08, 0.58, day), 0.3 - 0.1 * day, 0.42 + 0.22 * day);
+  scene.fog.density = 2.3e-5 + 3.5e-5 * (1 - day);
+  atmo.fogSunDir.value.copy(sunDir);
+  atmo.fogSunColor.value.setHSL(0.085, 0.7 - 0.3 * day, 0.55 + 0.25 * day);
+  clouds.cloudLight.value = 0.3 + 0.7 * day;
   if (envRT) envRT.dispose();
   envRT = pmrem.fromScene(envScene, 0.04);
   scene.environment = envRT.texture;
@@ -102,6 +131,62 @@ function updateShadowFrustum(focus, dist) {
   sun.position.copy(focus).addScaledVector(sunDir, 1800);
 }
 
+// --- Screen effects: ambient occlusion, bloom, filmic tone mapping -------------------
+// One pixel that is not a finite number (a degenerate derivative at the screen
+// edge will do it) would be smeared across the view by bloom: clean them out
+// and cap extremes first.
+const Sanitize = {
+  uniforms: { tDiffuse: { value: null } },
+  vertexShader: 'varying vec2 vUv; void main() { vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }',
+  fragmentShader: `uniform sampler2D tDiffuse; varying vec2 vUv;
+    void main() {
+      vec4 c = texture2D(tDiffuse, vUv);
+      bool bad = any(isnan(c.rgb)) || any(isinf(c.rgb));
+      gl_FragColor = bad ? vec4(0.0, 0.0, 0.0, 1.0) : vec4(min(c.rgb, vec3(48.0)), c.a);
+    }`,
+};
+let composer = null, gtao = null, bloom = null;
+function setupEffects() {
+  // Half-float, multisampled targets need WebGL 2 with float colour buffers.
+  if (FX === 'off' || !renderer.capabilities.isWebGL2 || !renderer.extensions.has('EXT_color_buffer_float')) return;
+  const w = canvas.clientWidth || innerWidth, h = canvas.clientHeight || innerHeight;
+  const rt = new THREE.WebGLRenderTarget(w, h, { type: THREE.HalfFloatType, samples: 4 });
+  composer = new EffectComposer(renderer, rt);
+  composer.addPass(new RenderPass(scene, camera));
+  composer.addPass(new ShaderPass(Sanitize));
+  gtao = new GTAOPass(scene, camera, w, h);
+  gtao.updateGtaoMaterial({ radius: 2.2, distanceExponent: 1.4, thickness: 2.5, scale: 1.1, samples: 16, distanceFallOff: 1, screenSpaceRadius: false });
+  gtao.updatePdMaterial({ lumaPhi: 10, depthPhi: 2, normalPhi: 3, radius: 6, radiusExponent: 1, rings: 2, samples: 16 });
+  gtao.blendIntensity = 0.85;
+  // Leave the sky, glass-like and glowing things out of the occlusion pass.
+  gtao.overrideVisibility = function () {
+    const cache = this._visibilityCache;
+    this.scene.traverse((o) => {
+      cache.set(o, o.visible);
+      if (o.isPoints || o.isLine || o.isSprite || o === sky || (o.material && !Array.isArray(o.material) && o.material.transparent)) o.visible = false;
+    });
+  };
+  composer.addPass(gtao);
+  // Only light well above sunlit stone blooms: the vision, fire, glints, the sun.
+  bloom = new UnrealBloomPass(new THREE.Vector2(w, h), 0.35, 0.45, 1.7);
+  composer.addPass(bloom);
+  composer.addPass(new OutputPass());
+}
+
+// Drop the costliest effects if the median frame is slow.
+const governor = { skip: 45, samples: [], done: FX !== 'auto' };
+function govern(dt) {
+  if (governor.done || !composer) return;
+  if (governor.skip > 0) { governor.skip--; return; }
+  if (dt > 0.4) { governor.samples.length = 0; return; }   // tab hidden or a hitch
+  governor.samples.push(dt);
+  if (governor.samples.length < 90) return;
+  const med = governor.samples.sort((a, b) => a - b)[45];
+  if (med > 1 / 28) gtao.enabled = false;
+  if (med > 1 / 16) { composer = null; W.vis.setGain(1); }
+  governor.done = true;
+}
+
 // --- Build the world ------------------------------------------------------------
 const W = {};
 const allZones = [];
@@ -117,20 +202,26 @@ async function build() {
   await step('Preparing stone, cedar and gold…', 6);
   W.mats = makeMaterials();
   installTerrainShader(W.mats.terrain);
-  await step('Shaping the hills of Jerusalem…', 14);
+  await step('Shaping the hills of Jerusalem…', 12);
   W.terrain = buildTerrain(W.mats, { seg: QUALITY === 'low' ? 520 : 680 });
   scene.add(W.terrain.group);
-  await step('Laying out fields, threshing floors and roads…', 30);
+  await step('Laying out fields, threshing floors and roads…', 24);
   W.plan = planCountryside();
   overlays.late = paintOverlay('late', W.plan);
-  await step('Building the city: houses, walls and gates…', 42);
+  await step('Building the city: houses, walls and gates…', 34);
   W.city = buildCity(W.mats, W.plan, { quality: QUALITY });
   for (const g of Object.values(W.city.groups)) scene.add(g);
-  await step('Measuring Ezekiel\'s gates and courts (40:5–42:20)…', 62);
+  await step('Scattering limestone and scrub over the hills…', 48);
+  W.nature = buildNature(W.mats, W.plan, { quality: QUALITY });
+  scene.add(W.nature);
+  await step('Measuring Ezekiel\'s gates and courts (40:5–42:20)…', 58);
   W.plat = buildPlatforms(W.mats);
   scene.add(W.plat.square.group, W.plat.sp.group, W.plat.shared.group);
   W.ez = buildEzekiel(W.mats);
   scene.add(W.ez.group);
+  W.vis = makeVisionLooks();
+  W.vision = buildEzekiel(W.mats, { vision: W.vis });
+  scene.add(W.vision.group);
   W.river = buildRiver(W.mats);
   scene.add(W.river.group);
   W.reeds = buildReedsOutline();
@@ -139,22 +230,34 @@ async function build() {
   scene.add(W.migrash);
   W.ezCity = buildCityOfEzekiel(W.mats);
   scene.add(W.ezCity.group);
-  await step('Building Solomon\'s house and palace (1 Kings 6–7)…', 78);
-  W.so = buildSolomon(W.mats);
-  scene.add(W.so.templeGroup, W.so.siteGroup, W.so.courtLateGroup, W.so.courtEarlyGroup);
-  for (const m of W.so.templeGroup.children) {
-    if (m.isMesh && m.material !== W.mats.fire) { m.userData.orig = m.material; m.userData.cast = m.castShadow; }
+  await step('Building Solomon\'s house in three periods (1 Kings 6–7; 2 Kings 16; 25)…', 72);
+  W.so = {};
+  for (const v of PERIOD_KEYS) {
+    W.so[v] = buildSolomon(W.mats, { variant: v });
+    scene.add(W.so[v].templeGroup, W.so[v].siteGroup, W.so[v].courtGroup);
+    fireMeshes.push(...W.so[v].fireMeshes);
   }
-  fireMeshes.push(...W.ez.fireMeshes, ...W.so.fireMeshes);
-  await step('Filling the courts and streets…', 88);
+  fireMeshes.push(...W.ez.fireMeshes);
+  // 573 BC: weeds over the deserted courts.
+  const precinctY = (x, z) => {
+    const u = x / CUBIT, v = z / CUBIT;
+    if (u > -28 && u < 78 && Math.abs(v) < 28) return BASE_Y + H * CUBIT;
+    if (u > -40 && u < 160 && Math.abs(v) < 50) return BASE_Y + I * CUBIT;
+    return BASE_Y + O * CUBIT;
+  };
+  W.weeds = overgrowth(W.mats, { x0: PODIUM.x0 + 4, x1: PODIUM.x1 - 4, z0: PODIUM.z0 + 4, z1: PODIUM.z1 - 4, y: precinctY }, { count: QUALITY === 'low' ? 500 : 1100 });
+  scene.add(W.weeds);
+  await step('Filling the courts and streets…', 86);
   W.life = buildLife(W.mats, {
     plan: W.plan, walk: W.city.walk, gates: W.city.gates, smoke: W.city.smoke,
-    ezAltar: W.ez.altarTop, ezHearths: W.ez.hearths, soAltar: W.so.altarTop,
+    ezAltar: W.ez.altarTop, ezHearths: W.ez.hearths, soAltar: W.so.early.altarTop, soAltarLate: W.so.late.altarTop,
   });
   for (const g of Object.values(W.life.groups)) scene.add(g);
 
   // Everything you can stand on when walking.
-  for (const g of [W.plat.square.group, W.plat.sp.group, W.plat.shared.group, W.ez.group, W.so.templeGroup, W.so.siteGroup, W.so.courtLateGroup, W.so.courtEarlyGroup]) {
+  const standOn = [W.plat.square.group, W.plat.sp.group, W.plat.shared.group, W.ez.group];
+  for (const v of PERIOD_KEYS) standOn.push(W.so[v].templeGroup, W.so[v].siteGroup, W.so[v].courtGroup);
+  for (const g of standOn) {
     g.traverse((o) => { if (o.isMesh && o.material !== W.mats.fire && !o.material.transparent) o.userData.solid = true; });
   }
   scene.traverse((o) => { if (o.isMesh && o.userData.solid) solids.push(o); });
@@ -162,34 +265,37 @@ async function build() {
   const tag = (zs, mode, periods) => zs.map((z) => ({ ...z, mode: INFO[z.id]?.mode || mode, periods: z.periods || periods }));
   allZones.push(
     ...tag(W.plat.square.zones, 'both', LATER), ...tag(W.plat.sp.zones, 'so', ['early']),
-    ...tag(W.ez.zones, 'ez'), ...tag(W.river.zones, 'ez'), ...tag(W.so.zones, 'so'),
-    ...tag(W.so.courtZones.late, 'so', ['late']), ...tag(W.so.courtZones.early, 'so', ['early']),
+    ...tag(W.ez.zones, 'ez'), ...tag(W.river.zones, 'ez'),
     ...tag(W.city.zones, 'both'),
   );
+  for (const v of PERIOD_KEYS) allZones.push(...tag(W.so[v].zones, 'so', [v]), ...tag(W.so[v].courtZones, 'so', [v]));
   houseZones.push(...allZones.filter((z) => z.id === 'ez-house' || z.id === 'so-house'));
 
-  for (const l of LANDMARKS) addLabel(l.name, V(l.x, terrainY(l.x, l.z) + l.lift, l.z), 'land', { far: 5200, hideIn: l.hideIn, periods: l.periods });
+  for (const l of LANDMARKS) addLabel(l.name, V(l.x, terrainY(l.x, l.z) + l.lift, l.z), 'land', { far: 5200, hideWithPalace: l.hideWithPalace, periods: l.periods });
   for (const l of W.ez.labels) addLabel(l.label, l.pos, 'ez', { far: 1100 });
   for (const l of W.river.markers) addLabel(l.label, l.pos, 'river', { far: 2600, small: true });
   addLabel(W.reeds.label.label, W.reeds.label.pos, 'reeds', { far: 9000 });
   for (const l of W.ezCity.labels) addLabel(l.label, l.pos, 'ezcity', { far: 16000, small: l.small });
-  for (const l of W.so.labels) addLabel(l.label, l.pos, 'so', { far: 1100, small: l.small });
+  for (const v of PERIOD_KEYS) for (const l of W.so[v].labels) addLabel(l.label, l.pos, 'so', { far: 1100, small: l.small, periods: [v] });
   for (const l of W.city.labels) addLabel(l.label, l.pos, 'city', { far: 2400, small: true, periods: l.periods, info: l.info });
   addLabel(W.life.label.label, W.life.label.pos, 'man', { far: 220, small: true, info: 'city-man' });
 
+  W.clouds = buildClouds();
+  scene.add(W.clouds);
   await step('Lighting the lamps…', 96);
+  patchScene(scene);
   setTime(parseFloat($('#time').value));
 }
 
 // --- Labels ---------------------------------------------------------------------
-function addLabel(text, pos, kind, { far = 1000, small = false, hideIn, periods, info } = {}) {
+function addLabel(text, pos, kind, { far = 1000, small = false, hideWithPalace, periods, info } = {}) {
   const el = document.createElement('div');
   el.className = `label ${kind} ${small ? 'small' : ''} ${info ? 'has-info' : ''}`;
   el.textContent = text;
   el.style.display = 'none';
   if (info) el.addEventListener('click', () => { select(info); openSheet('info'); });
   $('#labels').appendChild(el);
-  labels.push({ el, pos, kind, far, hideIn, periods, shown: false });
+  labels.push({ el, pos, kind, far, hideWithPalace, periods, shown: false });
 }
 
 const proj = new THREE.Vector3();
@@ -198,18 +304,19 @@ function updateLabels() {
   const w = canvas.clientWidth, h = canvas.clientHeight;
   const low = camera.position.y - terrainY(camera.position.x, camera.position.z) < 30;
   const indoors = houseZones.some((z) => z.box.containsPoint(camera.position) && zoneActive(z));
-  const { mode, period, layers } = state;
+  const { vision, period, layers } = state;
+  const ez = vision !== 'off';
   const cand = [];
   for (const l of labels) {
     let vis = layers.labels && !state.walking && !indoors;
-    if (l.kind === 'ez') vis &&= mode !== 'so';
-    if (l.kind === 'so') vis &&= mode === 'so';
-    if (l.kind === 'river') vis &&= mode !== 'so' && layers.river;
-    if (l.kind === 'reeds') vis &&= layers.reeds && mode !== 'so';
-    if (l.kind === 'ezcity') vis &&= layers.ezcity && mode !== 'so';
+    if (l.kind === 'ez') vis &&= ez;
+    if (l.kind === 'so') vis &&= vision !== 'solid';
+    if (l.kind === 'river') vis &&= ez && layers.river;
+    if (l.kind === 'reeds') vis &&= ez && layers.reeds;
+    if (l.kind === 'ezcity') vis &&= ez && layers.ezcity;
     if (l.kind === 'city') vis &&= layers.city;
-    if (l.kind === 'man') vis &&= mode === 'ez' && layers.life;
-    if (l.hideIn) vis &&= mode !== l.hideIn;
+    if (l.kind === 'man') vis &&= vision === 'solid' && layers.life;
+    if (l.hideWithPalace) vis &&= vision === 'solid';
     if (l.periods) vis &&= l.periods.includes(period);
     l.d = camera.position.distanceTo(l.pos);
     vis &&= l.d < l.far && l.d > 4;
@@ -240,32 +347,22 @@ function updateLabels() {
   }
 }
 
-// --- State, modes, periods, layers ------------------------------------------------
+// --- State: period and vision ------------------------------------------------------
+// period: early (c. 950 BC), late (c. 600 BC), ruin (573 BC).
+// vision: off (the temple as it stood), glow (Ezekiel's vision laid over it as
+// light), solid (Ezekiel's temple as if built, in place of Solomon's).
 const state = {
-  mode: 'ez',
   period: 'late',
+  vision: 'glow',
   walking: false,
   layers: { labels: true, city: true, life: true, river: true, migrash: true, reeds: false, ezcity: false },
   selected: null,
 };
-const lastPeriod = { ...DEFAULT_PERIOD };
 
 function zoneActive(z) {
-  const { mode, period } = state;
-  const modeOK = z.mode === 'both' || z.mode === mode || (mode === 'overlay' && (z.mode === 'ez' || z.mode === 'so'));
+  const { period, vision } = state;
+  const modeOK = z.mode === 'both' || (z.mode === 'ez' && vision !== 'off') || (z.mode === 'so' && vision !== 'solid');
   return modeOK && (!z.periods || z.periods.includes(period));
-}
-
-let edges = null;
-function ensureEdges() {
-  if (edges) return;
-  edges = [];
-  for (const m of W.so.templeGroup.children) {
-    if (!m.isMesh || !m.userData.orig) continue;
-    const line = new THREE.LineSegments(new THREE.EdgesGeometry(m.geometry, 30), W.mats.ghostLine);
-    W.so.templeGroup.add(line);
-    edges.push(line);
-  }
 }
 
 function setOverlay(period) {
@@ -277,22 +374,25 @@ function setOverlay(period) {
 }
 
 function applyVisibility() {
-  const { mode, period, layers } = state;
-  const showEz = mode !== 'so', showSo = mode !== 'ez', ghost = mode === 'overlay';
+  const { period, vision, layers } = state;
   const early = period === 'early', late = period === 'late', ruin = period === 'ruin';
+  const solid = vision === 'solid', glow = vision === 'glow', ez = vision !== 'off';
   applySite(W.terrain, early ? 'sp' : 'square');
   setOverlay(period);
   W.plat.square.group.visible = !early;
   W.plat.sp.group.visible = early;
-  W.ez.group.visible = showEz;
-  W.river.group.visible = showEz && layers.river;
-  W.migrash.visible = showEz && layers.migrash;
-  W.reeds.mesh.visible = showEz && layers.reeds;
-  W.ezCity.group.visible = showEz && layers.ezcity;
-  W.so.templeGroup.visible = showSo;
-  W.so.siteGroup.visible = mode === 'so';
-  W.so.courtLateGroup.visible = mode === 'so' && late;
-  W.so.courtEarlyGroup.visible = mode === 'so' && early;
+  W.ez.group.visible = solid;
+  W.vision.group.visible = glow;
+  W.river.group.visible = ez && layers.river;
+  W.river.mesh.material = glow ? W.vis.looks.river.face : W.mats.water;
+  W.migrash.visible = ez && layers.migrash;
+  W.reeds.mesh.visible = ez && layers.reeds;
+  W.ezCity.group.visible = ez && layers.ezcity;
+  for (const v of PERIOD_KEYS) {
+    const on = !solid && period === v;
+    W.so[v].templeGroup.visible = W.so[v].siteGroup.visible = W.so[v].courtGroup.visible = on;
+  }
+  W.weeds.visible = ruin && !solid;
 
   const c = W.city.groups, city = layers.city;
   c.common.visible = city;
@@ -301,94 +401,114 @@ function applyVisibility() {
   c.late.visible = city && late;
   c.ruin.visible = city && ruin;
   c.nearTrees.visible = city && !ruin;
-  c.padLate.visible = city && late && mode !== 'so';
-  c.padRuin.visible = city && ruin && mode !== 'so';
+  // Houses on the Ophel terrace only where no palace is shown.
+  c.padLate.visible = city && late && solid;
+  c.padRuin.visible = city && ruin && solid;
 
   const L = W.life.groups, life = layers.life;
-  L.ezFolk.visible = life && mode === 'ez' && late;
-  L.ezSpecial.visible = life && mode === 'ez';
-  L.soFolk.visible = life && mode === 'so';
-  L.soCourtLate.visible = life && mode === 'so' && late;
-  L.soCourtEarly.visible = life && mode === 'so' && early;
-  L.soPalace.visible = life && mode === 'so';
+  L.ezFolk.visible = life && solid && late;
+  L.ezSpecial.visible = life && solid;
+  L.soFolkEarly.visible = life && !solid && early;
+  L.soFolkLate.visible = life && !solid && late;
+  L.soCourtLate.visible = life && !solid && late;
+  L.soCourtEarly.visible = life && !solid && early;
+  L.soPalace.visible = life && !solid && !ruin;
   L.townLate.visible = life && city && late;
   L.townEarly.visible = life && city && early;
   L.countryEarly.visible = life && early;
   L.countryLate.visible = life && late;
   L.flocks.visible = life;
-  L.smokeEz.visible = mode === 'ez' && late;
-  L.smokeEzKitchens.visible = mode === 'ez' && late;
-  L.smokeSo.visible = mode === 'so';
+  L.ruinLife.visible = life && ruin && !solid;
+  L.smokeEz.visible = solid && late;
+  L.smokeEzKitchens.visible = solid && late;
+  L.smokeSo.visible = !solid && early;
+  L.smokeSoLate.visible = !solid && late;
   L.smokeLate.visible = city && late;
   L.smokeEarly.visible = city && early;
-
-  if (ghost) ensureEdges();
-  for (const m of W.so.templeGroup.children) {
-    if (m.isLight) m.visible = !ghost;
-    else if (m.isLineSegments) m.visible = ghost;
-    else if (m.isMesh && m.userData.orig) { m.material = ghost ? W.mats.ghost : m.userData.orig; m.castShadow = ghost ? false : m.userData.cast; }
-    else if (m.isMesh) m.visible = !ghost;   // flames
-  }
-  document.querySelectorAll('.ez-only').forEach((el) => { el.hidden = !showEz; });
+  document.querySelectorAll('.ez-only').forEach((el) => { el.hidden = !ez; });
 }
 
-const TITLES = { ez: 'Ezekiel\'s Temple', so: 'Solomon\'s Temple', overlay: 'Two Temples' };
-const SUBS = {
-  ez: 'Ezekiel 40–48 · long cubit 52.5 cm · Jerusalem',
-  so: '1 Kings 6–7 · 2 Chronicles 3–4',
-  overlay: 'Solomon (blue outline) over Ezekiel (solid)',
+const TITLES = {
+  off: { early: 'Solomon\'s Temple', late: 'Solomon\'s Temple', ruin: 'The Temple in Ruins' },
+  glow: 'Ezekiel\'s Vision',
+  solid: 'Ezekiel\'s Temple',
 };
-const MODE_HASH = { ez: 'ezekiel', so: 'solomon', overlay: 'overlay' };
-const PERIOD_HASH = { early: '950', late: '600', ruin: '573' };
+const VISION_SUB = { off: '', glow: ' · vision overlaid', solid: ' · vision as if built' };
 
 function writeHash() {
-  const { mode, period } = state;
-  const hash = MODE_HASH[mode] + (period !== DEFAULT_PERIOD[mode] ? '-' + PERIOD_HASH[period] : '');
+  const { period, vision } = state;
+  const hash = { early: '950', late: '600', ruin: '573' }[period] + (vision === 'off' ? '' : '-' + vision);
   if (location.hash.slice(1) !== hash) {
     try { history.replaceState(null, '', '#' + hash); } catch { /* sandboxed frames may refuse */ }
   }
 }
 
-function renderPeriods() {
-  const allowed = MODE_PERIODS[state.mode];
-  document.querySelectorAll('.periods button').forEach((b) => {
-    b.hidden = !allowed.includes(b.dataset.period);
-    b.setAttribute('aria-pressed', String(b.dataset.period === state.period));
+function renderControls() {
+  const { period, vision } = state;
+  document.querySelectorAll('.modes button').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.period === period)));
+  document.querySelectorAll('.vision button').forEach((b) => {
+    b.setAttribute('aria-pressed', String(b.dataset.vision === vision));
+    if (b.dataset.vision === 'solid') {
+      b.disabled = period === 'early';
+      b.title = period === 'early' ? 'Ezekiel\'s temple needs the 500-cubit platform of the later Temple Mount: choose c. 600 BC or 573 BC' : 'Ezekiel\'s temple as if built, in place of Solomon\'s';
+    }
   });
-  $('.periods').hidden = allowed.length < 2;
-  $('#lyr-city-label').textContent = PERIODS[state.period].title.replace(/,.*$/, '');
+  document.body.dataset.mode = vision === 'off' ? 'so' : 'ez';
+  document.body.dataset.vision = vision;
+  $('#title').textContent = vision === 'off' ? TITLES.off[period] : TITLES[vision];
+  $('#sub').textContent = `${PERIODS[period].name}, ${PERIODS[period].short}${VISION_SUB[vision]}`;
+  $('#lyr-city-label').textContent = PERIODS[period].title.replace(/,.*$/, '');
+  $('#vision-panel').hidden = vision !== 'glow';
 }
 
-function setMode(mode, { period, fromHash = false } = {}) {
-  state.mode = mode;
-  const allowed = MODE_PERIODS[mode];
-  state.period = allowed.includes(period) ? period : allowed.includes(lastPeriod[mode]) ? lastPeriod[mode] : DEFAULT_PERIOD[mode];
-  lastPeriod[mode] = state.period;
-  document.body.dataset.mode = mode === 'so' ? 'so' : 'ez';
-  document.querySelectorAll('.modes button').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.mode === mode)));
-  $('#sub').textContent = SUBS[mode];
-  $('#title').textContent = TITLES[mode];
-  renderPeriods();
+function setScene({ period = state.period, vision = state.vision, fromHash = false } = {}) {
+  if (period === 'early' && vision === 'solid') vision = 'glow';
+  state.period = period;
+  state.vision = vision;
+  renderControls();
   applyVisibility();
   renderViews();
   select(null);
   if (!fromHash) writeHash();
 }
 
-function setPeriod(period) {
-  if (!MODE_PERIODS[state.mode].includes(period)) return;
-  state.period = period;
-  lastPeriod[state.mode] = period;
-  renderPeriods();
-  applyVisibility();
-  renderViews();
-  if (!state.selected) select(null);
-  writeHash();
-}
-
 // --- Camera views ---------------------------------------------------------------------
 const OLIVET = () => V(560, terrainY(560, 40) + 26, 40);
 const overview = { name: () => PERIODS[state.period].title, pos: () => V(360, 330, 820), target: () => V(40, 130, 90) };
+const LIVE = ['early', 'late'];
+const SO_VIEWS = [
+  { name: 'Temple and palace', pos: () => S(330, 140, 620), target: () => S(80, 0, 260), periods: LIVE },
+  { name: 'Ruined temple and palace', pos: () => S(330, 140, 620), target: () => S(80, 0, 260), periods: ['ruin'] },
+  { name: 'From the Mount of Olives', pos: OLIVET, target: () => S(60, 20, 0) },
+  { name: 'Courts of the house', pos: () => S(240, 60, 150), target: () => S(40, 15, 0) },
+  { name: 'Jachin and Boaz', pos: () => S(118, I + EYE, 24), target: () => S(70, H + 12, 0), periods: LIVE },
+  { name: 'Bronze Sea on twelve oxen', pos: () => S(88, I + 7, 47), target: () => S(50, I + 4, 30), periods: ['early'] },
+  { name: 'Bronze Sea on its stone base', pos: () => S(88, I + 7, 47), target: () => S(50, I + 4, 30), periods: ['late'] },
+  { name: 'Altar of Ahaz', pos: () => S(168, I + 16, 42), target: () => S(134, I + 5, -8), periods: ['late'] },
+  { name: 'Upper Gate', pos: () => S(60, O + 14, -100), target: () => S(60, I + 6, -50), periods: ['late'] },
+  { name: 'Inside the nave', pos: () => S(49, H + EYE, 3), target: () => S(5, H + 7, 0), periods: LIVE },
+  { name: 'Cherubim and the ark', pos: () => S(9.2, H + 11, 9.2), target: () => S(-2, H + 5, -1), periods: LIVE },
+  { name: 'Inside the burned house', pos: () => S(64, H + 16, 10), target: () => S(6, H + 2, 0), periods: ['ruin'] },
+  { name: 'Palace on the Ophel', pos: () => S(290, 40, 720), target: () => S(110, -18, 470), periods: LIVE },
+];
+const COMPARE_VIEWS = [
+  { name: 'Both houses from above', pos: () => E(-30, 150, 110), target: () => E(-100, H, 0) },
+  { name: 'Both plans from above', pos: () => E(-20, 820, 2), target: () => E(-20, 0, 0) },
+  { name: 'Side by side, from the east', pos: () => E(60, H + 20, 40), target: () => E(-110, H + 12, 0) },
+  { name: 'Inside both naves', pos: () => E(-74, H + EYE + 2, 6), target: () => E(-130, H + 8, 0) },
+  { name: 'The altars', pos: () => E(60, I + 22, 70), target: () => E(10, I + 6, 0) },
+  { name: 'Ezekiel\'s east gates', pos: () => E(330, 46, 120), target: () => E(170, 8, 0) },
+];
+const EZ_VIEWS = [
+  { name: 'Plan from above', pos: () => E(0, 1000, 2), target: () => E(0, 0, 0) },
+  { name: 'Approaching the shut east gate', pos: () => E(322, 40, 92), target: () => E(236, 10, 0) },
+  { name: 'The man with the measuring reed', pos: () => E(176, O + EYE + 2, 12), target: () => E(194, O + 2.5, -1) },
+  { name: 'Outer court', pos: () => E(175, O + EYE, -150), target: () => E(60, O + 12, -10) },
+  { name: 'Inner court and altar', pos: () => E(44, I + EYE, 34), target: () => E(0, I + 7, 0) },
+  { name: 'Before the porch', pos: () => E(-18, I + EYE, 16), target: () => E(-60, H + 14, 0) },
+  { name: 'Inside the nave', pos: () => E(-76, H + EYE, 4), target: () => E(-125, H + 7, 0) },
+  { name: 'The Most Holy Place', pos: () => E(-116.5, H + EYE, 7), target: () => E(-132, H + 8, -6) },
+];
 const CITY_VIEWS = [
   { name: 'City of David and the Millo', pos: () => V(175, 150, 470), target: () => V(45, 95, 432) },
   { name: 'Gihon Spring and the Kidron', pos: () => V(235, 112, 565), target: () => V(110, 62, 500) },
@@ -397,45 +517,25 @@ const CITY_VIEWS = [
   { name: 'Silwan tombs across the Kidron', pos: () => V(110, 120, 610), target: () => V(250, 80, 560), periods: LATER },
   { name: 'The Babylonian siege ramp', pos: () => V(-668, 196, 92), target: () => V(-604, 158, 182), periods: ['ruin'] },
   { name: 'High places on the Mount of Corruption', pos: () => V(572, terrainY(572, 730) + 16, 730), target: () => V(610, terrainY(610, 690) + 2, 690), periods: ['early'] },
+  { name: 'East to the Dead Sea and Moab', pos: () => V(830, terrainY(830, -40) + 40, -40), target: () => V(9000, 110, 2400) },
 ];
-const VIEWS = {
-  ez: [
-    overview,
-    { name: 'From the Mount of Olives', pos: OLIVET, target: () => E(-40, 16, 0) },
-    { name: 'Plan from above', pos: () => E(0, 1000, 2), target: () => E(0, 0, 0) },
-    { name: 'Approaching the shut east gate', pos: () => E(322, 40, 92), target: () => E(236, 10, 0) },
-    { name: 'The man with the measuring reed', pos: () => E(176, O + EYE + 2, 12), target: () => E(194, O + 2.5, -1) },
-    { name: 'Outer court', pos: () => E(175, O + EYE, -150), target: () => E(60, O + 12, -10) },
-    { name: 'Inner court and altar', pos: () => E(44, I + EYE, 34), target: () => E(0, I + 7, 0) },
-    { name: 'Before the porch', pos: () => E(-18, I + EYE, 16), target: () => E(-60, H + 14, 0) },
-    { name: 'Inside the nave', pos: () => E(-76, H + EYE, 4), target: () => E(-125, H + 7, 0) },
-    { name: 'The Most Holy Place', pos: () => E(-116.5, H + EYE, 7), target: () => E(-132, H + 8, -6) },
-    { name: 'The river flowing east', pos: () => V(390, 178, 330), target: () => V(225, 100, 120), layer: 'river' },
-    ...CITY_VIEWS,
-    { name: '"500 reeds" to scale', pos: () => V(-1900, 1300, -1700), target: () => V(65, 110, 0), layer: 'reeds' },
-    { name: 'Ezekiel 48 city to scale', pos: () => V(2300, 1500, -900), target: () => V(65, 100, 2700), layer: 'ezcity' },
-  ],
-  so: [
-    overview,
-    { name: 'Temple and palace', pos: () => S(330, 140, 620), target: () => S(80, 0, 260) },
-    { name: 'From the Mount of Olives', pos: OLIVET, target: () => S(60, 20, 0) },
-    { name: 'Courts of the house', pos: () => S(240, 60, 150), target: () => S(40, 15, 0) },
-    { name: 'Jachin and Boaz', pos: () => S(118, I + EYE, 24), target: () => S(70, H + 12, 0) },
-    { name: 'Bronze Sea and stands', pos: () => S(88, I + 7, 47), target: () => S(50, I + 4, 30) },
-    { name: 'Inside the nave', pos: () => S(49, H + EYE, 3), target: () => S(5, H + 7, 0) },
-    { name: 'Cherubim and the ark', pos: () => S(9.2, H + 11, 9.2), target: () => S(-2, H + 5, -1) },
-    { name: 'Palace on the Ophel', pos: () => S(290, 40, 720), target: () => S(110, -18, 470) },
-    ...CITY_VIEWS,
-  ],
-  overlay: [
-    { name: 'Both houses from above', pos: () => E(-30, 150, 110), target: () => E(-100, H, 0) },
-    { name: 'Footprints in plan', pos: () => E(-60, 480, 1), target: () => E(-60, 0, 0) },
-    { name: 'Side by side, from the east', pos: () => E(60, H + 20, 40), target: () => E(-110, H + 12, 0) },
-    { name: 'Inside both naves', pos: () => E(-74, H + EYE + 2, 6), target: () => E(-130, H + 8, 0) },
-    { name: 'Two altars', pos: () => E(60, I + 22, 70), target: () => E(10, I + 6, 0) },
-    overview,
-  ],
-};
+const LAYER_VIEWS = [
+  { name: 'The river flowing east', pos: () => V(390, 178, 330), target: () => V(225, 100, 120), layer: 'river' },
+  { name: '"500 reeds" to scale', pos: () => V(-1900, 1300, -1700), target: () => V(65, 110, 0), layer: 'reeds' },
+  { name: 'Ezekiel 48 city to scale', pos: () => V(2300, 1500, -900), target: () => V(65, 100, 2700), layer: 'ezcity' },
+];
+
+function viewSections() {
+  const { period, vision } = state;
+  const inPeriod = (v) => !v.periods || v.periods.includes(period);
+  const sections = [];
+  if (vision === 'solid') sections.push(['Ezekiel\'s temple', [overview, { name: 'From the Mount of Olives', pos: OLIVET, target: () => E(-40, 16, 0) }, ...EZ_VIEWS]]);
+  else sections.push([period === 'ruin' ? 'The ruined temple' : 'Solomon\'s temple', [overview, ...SO_VIEWS.filter(inPeriod)]]);
+  if (vision === 'glow') sections.push(['Compare with the vision', COMPARE_VIEWS]);
+  sections.push(['City and land', CITY_VIEWS.filter(inPeriod)]);
+  if (vision !== 'off') sections.push(['Vision to scale', LAYER_VIEWS]);
+  return sections;
+}
 
 let flight = null;
 function flyTo(pos, target, ms = 1700) {
@@ -446,26 +546,37 @@ function flyTo(pos, target, ms = 1700) {
 function renderViews() {
   const list = $('#views-list');
   list.replaceChildren();
-  for (const v of VIEWS[state.mode]) {
-    if (v.periods && !v.periods.includes(state.period)) continue;
-    const b = document.createElement('button');
-    b.type = 'button';
-    b.textContent = typeof v.name === 'function' ? v.name() : v.name;
-    b.addEventListener('click', () => {
-      list.querySelectorAll('button').forEach((x) => x.classList.toggle('active', x === b));
-      if (v.layer && !state.layers[v.layer]) { state.layers[v.layer] = true; $('#lyr-' + v.layer).checked = true; applyVisibility(); }
-      flyTo(v.pos(), v.target());
-      closeSheets();
-    });
-    list.appendChild(b);
+  for (const [title, views] of viewSections()) {
+    const h = document.createElement('div');
+    h.className = 'views-head';
+    h.textContent = title;
+    list.appendChild(h);
+    for (const v of views) {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.textContent = typeof v.name === 'function' ? v.name() : v.name;
+      b.addEventListener('click', () => {
+        list.querySelectorAll('button').forEach((x) => x.classList.toggle('active', x === b));
+        if (v.layer && !state.layers[v.layer]) { state.layers[v.layer] = true; $('#lyr-' + v.layer).checked = true; applyVisibility(); }
+        flyTo(v.pos(), v.target());
+        closeSheets();
+      });
+      list.appendChild(b);
+    }
   }
+}
+
+function renderLegend() {
+  $('#legend').innerHTML = VISION_PARTS.filter((p) => p.tag !== 'court').map((p) =>
+    `<li title="${esc(p.note)}"><i style="background:${p.color};box-shadow:0 0 8px ${p.color}"></i>${esc(p.label)}</li>`).join('');
 }
 
 // --- Info panel ---------------------------------------------------------------------
 const PAIRS = {
   'ez-porch': 'so-porch', 'ez-nave': 'so-nave', 'ez-hoh': 'so-hoh', 'ez-side': 'so-side', 'ez-altar': 'so-altar',
   'ez-pillars': 'so-pillars', 'ez-house': 'so-house', 'ez-inner-court': 'so-inner-court', 'ez-river': 'so-sea',
-  'ez-table': 'so-table', 'ez-wall': 'so-great-court', 'ez-platform': 'so-house',
+  'ez-table': 'so-table', 'ez-wall': 'so-great-court', 'ez-platform': 'so-house', 'so-altar-ahaz': 'ez-altar',
+  'so-ruin': 'ez-house', 'so-ruin-altar': 'ez-altar',
 };
 for (const [a, b] of Object.entries(PAIRS)) if (!PAIRS[b]) PAIRS[b] = a;
 
@@ -477,29 +588,46 @@ const CITY_FACT = {
   ruin: 'Burned by Nebuzaradan in 586 BC; walls broken down (2 Kgs 25:8–10).',
 };
 
+const TEMPLE_NOW = {
+  early: {
+    eyebrow: '1 Kings 6–7 · c. 950 BC', head: 'Solomon\'s temple and palace',
+    lead: 'Built in seven years (1 Kgs 6:38) on the threshing floor of Araunah (2 Chr 3:1), with the palace beside it on the Ophel. Kings gives the rooms and the bronze work in detail but no sizes for the courts, so those are reconstructions.',
+    facts: '<dt>House</dt><dd>60 × 20 cubits, 30 high</dd><dt>Doors</dt><dd>Carved and overlaid with gold</dd><dt>Sea</dt><dd>On twelve bronze oxen</dd>',
+  },
+  late: {
+    eyebrow: '2 Kings 16–23 · c. 600 BC', head: 'The temple Ezekiel knew',
+    lead: 'Ezekiel was a priest (1:3) taken to Babylon in 597 BC. By his day the house was 350 years old and had been changed: Ahaz\'s great altar stood in front with the bronze altar moved to its north, the Sea sat on stones, the stands had lost their basins, and Hezekiah had stripped the gold from the doors. Jotham had built the Upper Gate.',
+    facts: '<dt>Altar</dt><dd>Ahaz\'s, copied from Damascus (2 Kgs 16:10–15)</dd><dt>Sea</dt><dd>On a pavement of stones (16:17)</dd><dt>Doors</dt><dd>Gold stripped (18:16)</dd>',
+  },
+  ruin: {
+    eyebrow: '2 Kings 25 · 573 BC', head: 'The temple in ruins',
+    lead: 'Nebuzaradan burned the house of the LORD, the palace and every great house in 586 BC, broke down the walls and carried the bronze to Babylon. Ezekiel\'s vision is dated fourteen years later (40:1): this is what stood on the hill when it came.',
+    facts: '<dt>Burned</dt><dd>586 BC (2 Kgs 25:8–9)</dd><dt>Bronze</dt><dd>Pillars, Sea and stands carried off (25:13–17)</dd><dt>Ruin</dt><dd>Wall heights are a reconstruction</dd>',
+  },
+};
+
 function introHTML() {
-  const { mode, period } = state;
+  const { period, vision } = state;
   const city = `<dt>City</dt><dd>${CITY_FACT[period]}</dd>`;
-  if (mode === 'so') {
-    return `<div class="card"><div class="eyebrow">1 Kings 6–7 · ${PERIODS[period].short}</div>
-      <h2>Solomon's temple and palace</h2>
-      <p class="note">Built in seven years (1 Kgs 6:38) on the threshing floor of Araunah (2 Chr 3:1). It stood until Nebuchadnezzar's army burned it in 586 BC. Kings gives the rooms and bronze work in detail but no sizes for the courts, so those are reconstructions.</p>
-      <dl class="facts"><dt>Cubit</dt><dd>"Of the first measure" (2 Chr 3:3), taken as 52.5 cm</dd>
-      <dt>House</dt><dd>60 × 20 cubits, 30 high</dd>
-      <dt>Palace</dt><dd>Directly south, on the Ophel</dd>${city}
-      <dt>Assumed</dt><dd>Court sizes, wall thickness, platform levels</dd></dl>
-      <p>Click any building, object or person to see what it is and the sources behind it. Switch the period above to see the city of ${period === 'early' ? 'c. 600 BC' : 'c. 950 BC'}.</p></div>`;
+  const now = TEMPLE_NOW[period];
+  if (vision === 'off') {
+    return `<div class="card"><div class="eyebrow">${now.eyebrow}</div><h2>${now.head}</h2>
+      <p class="note">${now.lead}</p>
+      <dl class="facts">${now.facts}${city}</dl>
+      <p>Click any building, object or person for its sources. Turn on <b>Ezekiel's vision</b> above to lay his temple over this one.</p></div>`;
   }
-  if (mode === 'overlay') {
-    return `<div class="card"><div class="eyebrow">Overlay</div>
-      <h2>One rock, two houses</h2>
-      <p class="note">Both Most Holy Places are set on the same rock, so the rooms line up. Both naves are 40 × 20 cubits and both inner rooms 20 × 20. Ezekiel's house is longer overall (100 cubits) because of its 6-cubit walls, deeper porch and the open "place left" round it.</p>
-      <dl class="facts"><dt>Solid</dt><dd>Ezekiel 40–48</dd><dt>Blue</dt><dd>Solomon, 1 Kings 6–7</dd></dl>
-      <p>Open "Ezekiel vs Solomon" above for the full side-by-side table.</p></div>`;
+  if (vision === 'glow') {
+    const over = { early: 'Solomon\'s temple as built', late: 'the temple Ezekiel knew as a priest', ruin: 'the ruins of 573 BC, the year of the vision' }[period];
+    return `<div class="card"><div class="eyebrow">Ezekiel 40–48 over ${PERIODS[period].short}</div>
+      <h2>Ezekiel's vision, laid over ${over}</h2>
+      <p class="note">The glowing plan is built from the numbers in Ezekiel 40–42; the solid buildings are what stood on the hill in ${PERIODS[period].short}. Both Most Holy Places sit over the rock, so the naves (40 × 20) and inner rooms (20 × 20) line up exactly. Everything else changes: a 500-cubit walled square, six great gates, two courts on terraces, and no palace beside the house (43:7–9).</p>
+      <dl class="facts"><dt>Colours</dt><dd>By part; see "Vision colours" with the views</dd>
+      <dt>Strength</dt><dd>Use the slider to fade the vision in or out</dd>${city}</dl>
+      <p>Click a glowing part for Ezekiel's measurements, or a solid one for what stood there in ${PERIODS[period].short}. Open "Ezekiel vs Solomon" for the full table.</p></div>`;
   }
   const lead = period === 'ruin'
-    ? 'Fourteen years after the city was struck down (40:1), a man with a measuring reed leads Ezekiel through a new temple in a vision. Here the vision stands on the Temple Mount above the burned city of 573 BC.'
-    : 'In the 25th year of the exile a man with a measuring reed of six long cubits leads Ezekiel through a temple on a very high mountain (40:1–5). Here it stands in the city Ezekiel knew before its fall.';
+    ? 'Fourteen years after the city was struck down (40:1), a man with a measuring reed leads Ezekiel through a new temple in a vision. Here it stands, as if built, above the burned city of 573 BC.'
+    : 'In the 25th year of the exile a man with a measuring reed of six long cubits leads Ezekiel through a temple on a very high mountain (40:1–5). Here it stands, as if built, in the city Ezekiel knew before its fall.';
   return `<div class="card"><div class="eyebrow">Ezekiel 40–48 · ${PERIODS[period].short}</div>
     <h2>A temple built from the measuring reed</h2>
     <p class="note">${lead} Every wall, gate and room is built from the numbers he records.</p>
@@ -512,8 +640,8 @@ function introHTML() {
 }
 
 function eyebrowFor(id, d) {
-  if (d.mode === 'so') return '1 Kings · 2 Chronicles';
-  if (d.mode === 'ez') return 'Ezekiel 40–48';
+  if (d.mode === 'so') return /^so-ruin/.test(id) ? '2 Kings 25 · 573 BC' : `1 Kings · 2 Kings · ${PERIODS[state.period].short}`;
+  if (d.mode === 'ez') return state.vision === 'glow' ? 'Ezekiel 40–48 · the vision' : 'Ezekiel 40–48';
   if (/^(city|gate|land)-/.test(id)) return `Jerusalem · ${PERIODS[state.period].short}`;
   return 'Temple Mount';
 }
@@ -551,8 +679,12 @@ function select(id, box) {
   const goto = $('#pane-info [data-goto]');
   if (goto) goto.addEventListener('click', () => {
     const target = goto.dataset.goto;
-    const mode = INFO[target].mode === 'so' ? 'so' : 'ez';
-    setMode(mode, { period: 'late' });
+    if (INFO[target].mode === 'ez') {
+      if (state.vision === 'off') setScene({ vision: 'glow' });
+    } else {
+      if (state.vision === 'solid') setScene({ vision: 'glow' });
+      if (state.period === 'ruin' && !/^so-ruin/.test(target)) setScene({ period: 'late' });
+    }
     const z = allZones.filter((zz) => zz.id === target && zoneActive(zz)).sort((a, b) => vol(a.box) - vol(b.box))[0];
     if (z) { select(target, z.box); focusBox(z.box); }
   });
@@ -580,10 +712,12 @@ const ndc = new THREE.Vector2();
 let down = null;
 
 const isShown = (o) => { for (; o; o = o.parent) if (!o.visible) return false; return true; };
+const within = (o, root) => { for (; o; o = o.parent) if (o === root) return true; return false; };
 
 function pickTargets() {
-  const roots = [W.terrain.mesh, W.ez.group, W.river.group, W.so.templeGroup, W.so.siteGroup, W.so.courtLateGroup, W.so.courtEarlyGroup,
-    W.plat.square.group, W.plat.sp.group, W.plat.shared.group, ...Object.values(W.city.groups), ...Object.values(W.life.groups)];
+  const roots = [W.terrain.mesh, W.ez.group, W.vision.group, W.river.group, W.plat.square.group, W.plat.sp.group, W.plat.shared.group,
+    W.nature, W.weeds, ...Object.values(W.city.groups), ...Object.values(W.life.groups)];
+  for (const v of PERIOD_KEYS) roots.push(W.so[v].templeGroup, W.so[v].siteGroup, W.so[v].courtGroup);
   return roots.filter((r) => r.visible);
 }
 
@@ -591,14 +725,20 @@ function pick(clientX, clientY) {
   const r = canvas.getBoundingClientRect();
   ndc.set(((clientX - r.left) / r.width) * 2 - 1, -((clientY - r.top) / r.height) * 2 + 1);
   ray.setFromCamera(ndc, camera);
-  const hits = ray.intersectObjects(pickTargets(), true)
-    .filter((h) => !h.object.isSprite && !h.object.isLineSegments && h.object.material !== W.mats.fire && isShown(h.object));
+  const hits = ray.intersectObjects(pickTargets(), true).filter((h) => {
+    const o = h.object;
+    return !o.isSprite && !o.isLineSegments && o.material !== W.mats.fire && !o.userData.xray && o.userData.visionTag !== 'court' && isShown(o);
+  });
   if (!hits.length) return;
   const hit = hits[0];
   const p = hit.point;
+  // In the overlay, a glowing part answers with Ezekiel's card; anything solid
+  // with the card of the period shown.
+  const inVision = within(hit.object, W.vision.group);
   let best = null;
   for (const z of allZones) {
     if (!zoneActive(z)) continue;
+    if (state.vision === 'glow' && (z.mode === 'ez') !== inVision) continue;
     if (z.box.clone().expandByScalar(0.35).containsPoint(p) && (!best || vol(z.box) < vol(best.box))) best = z;
   }
   if (best) { select(best.id, best.box); openSheet('info'); return; }
@@ -721,8 +861,9 @@ function stepWalk(dt) {
 }
 
 // --- UI wiring ------------------------------------------------------------------------
-document.querySelectorAll('.modes button').forEach((b) => b.addEventListener('click', () => setMode(b.dataset.mode)));
-document.querySelectorAll('.periods button').forEach((b) => b.addEventListener('click', () => setPeriod(b.dataset.period)));
+document.querySelectorAll('.modes button').forEach((b) => b.addEventListener('click', () => setScene({ period: b.dataset.period })));
+document.querySelectorAll('.vision button').forEach((b) => b.addEventListener('click', () => setScene({ vision: b.dataset.vision })));
+$('#strength').addEventListener('input', (e) => W.vis?.setStrength(parseFloat(e.target.value)));
 $('#walk').addEventListener('click', () => setWalking(!state.walking));
 $('#toggle-panels').addEventListener('click', (e) => {
   const hidden = document.body.classList.toggle('panels-hidden');
@@ -759,30 +900,53 @@ document.querySelectorAll('[data-open]').forEach((b) => b.addEventListener('clic
   openSheet($('#' + id).classList.contains('open') ? null : id);
 }));
 
+// #600-glow, #573-solid, #950 … Older links (#ezekiel, #solomon-600, #overlay) still work.
 function fromHash() {
-  const [name, year] = location.hash.slice(1).split('-');
-  const mode = { ezekiel: 'ez', solomon: 'so', overlay: 'overlay' }[name];
-  if (!mode) return null;
+  const h = location.hash.slice(1);
+  const m = /^(950|600|573)(?:-(glow|solid))?$/.exec(h);
+  if (m) return { period: { 950: 'early', 600: 'late', 573: 'ruin' }[m[1]], vision: m[2] || 'off' };
+  const [name, year] = h.split('-');
   const period = { 950: 'early', 600: 'late', 573: 'ruin' }[year];
-  return { mode, period };
+  if (name === 'ezekiel') return { period: period || 'late', vision: 'solid' };
+  if (name === 'solomon') return { period: period || 'early', vision: 'off' };
+  if (name === 'overlay') return { period: 'late', vision: 'glow' };
+  return null;
 }
 addEventListener('hashchange', () => {
   const h = fromHash();
-  if (h && (h.mode !== state.mode || (h.period && h.period !== state.period))) setMode(h.mode, { period: h.period, fromHash: true });
+  if (h && (h.period !== state.period || h.vision !== state.vision)) setScene({ ...h, fromHash: true });
 });
 
 // --- Loop ---------------------------------------------------------------------------
 function resize() {
   const w = canvas.clientWidth, h = canvas.clientHeight;
   renderer.setSize(w, h, false);
+  composer?.setPixelRatio(renderer.getPixelRatio());
+  composer?.setSize(w, h);
   camera.aspect = w / h;
   camera.updateProjectionMatrix();
 }
 new ResizeObserver(resize).observe(canvas);
 
+// Near plane: far enough out for depth precision across the hills, close
+// enough not to cut into whatever the camera is near.
+function updateNear() {
+  const ground = camera.position.y - terrainY(camera.position.x, camera.position.z);
+  const near = state.walking ? 0.12
+    : THREE.MathUtils.clamp(Math.min(camera.position.distanceTo(controls.target), Math.max(ground, 0.5)) * 0.06, 0.12, 12);
+  if (Math.abs(near - camera.near) > camera.near * 0.15) {
+    camera.near = near;
+    camera.updateProjectionMatrix();
+  }
+}
+
 const clock = new THREE.Clock();
 const ease = (t) => (t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2);
+let lastNow = performance.now();
 function frame() {
+  const now = performance.now();
+  govern((now - lastNow) / 1000);
+  lastNow = now;
   const dt = Math.min(clock.getDelta(), 0.05);
   const time = clock.elapsedTime;
   if (flight) {
@@ -802,30 +966,39 @@ function frame() {
     const gy = terrainY(camera.position.x, camera.position.z) + 1.2;
     if (camera.position.y < gy) camera.position.y = gy;
   }
+  updateNear();
   const focus = state.walking ? camera.position : controls.target;
   updateShadowFrustum(focus, state.walking ? 120 : camera.position.distanceTo(controls.target));
   W.mats.water.normalMap.offset.set(time * 0.01, -time * 0.06);
+  W.vis.shared.time.value = time;
+  clouds.cloudTime.value = time;
+  W.clouds.userData.follow(camera);
   for (const m of fireMeshes) {
+    if (!m.parent?.visible) continue;
     const s = m.userData.base * (0.8 + 0.25 * Math.sin(time * 9 + m.userData.phase) + 0.1 * Math.sin(time * 23 + m.userData.phase * 3));
-    m.scale.set(m.userData.base, s, m.userData.base);
+    m.scale.set(m.userData.base * 0.9, s * 2, 1);
   }
   const flick = 0.85 + 0.15 * Math.sin(time * 11) * Math.sin(time * 7.3);
   W.ez.altarLight.intensity = 90 * flick;
-  W.so.altarLight.intensity = 90 * flick;
+  for (const v of PERIOD_KEYS) if (W.so[v].altarLight) W.so[v].altarLight.intensity = 90 * flick;
   for (const g of Object.values(W.life.groups)) if (g.visible && g.userData.update) g.userData.update(time);
-  renderer.render(scene, camera);
+  if (composer) composer.render(dt);
+  else renderer.render(scene, camera);
   updateLabels();
   requestAnimationFrame(frame);
 }
 
 // --- Start --------------------------------------------------------------------------------
 build().then(() => {
+  setupEffects();
+  W.vis.setGain(composer ? 2.2 : 1);   // brighter where bloom can spread it
   resize();
   renderCompare();
-  const h = fromHash();
-  setMode(h ? h.mode : 'ez', { period: h?.period, fromHash: true });
+  renderLegend();
+  const h = fromHash() || { period: 'late', vision: 'glow' };
+  setScene({ ...h, fromHash: !!fromHash() });
   $('#loading').classList.add('done');
-  window.ezt = { scene, camera, controls, renderer, W, state, setMode, setPeriod, setTime, flyTo, select };
+  window.ezt = { scene, camera, controls, renderer, W, state, setScene, setTime, flyTo, select, viewSections, get composer() { return composer; }, get gtao() { return gtao; }, get bloom() { return bloom; } };
   frame();
 }).catch((err) => {
   console.error(err);

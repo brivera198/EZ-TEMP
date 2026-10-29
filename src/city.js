@@ -757,17 +757,55 @@ function siegeRamp(mats, wallInfo) {
 }
 
 // --- Trees and vineyards -----------------------------------------------------------
+// Canopy of several leafy clumps, darker underneath and toward the core.
+function canopy(clumps, silver) {
+  const parts = clumps.map(([x, y, z, r]) => {
+    const g = new THREE.IcosahedronGeometry(r, 0);
+    const p = g.attributes.position;
+    for (let i = 0; i < p.count; i++) {
+      const vx = p.getX(i), vy = p.getY(i), vz = p.getZ(i);
+      const k = 1 + 0.18 * Math.sin(vx * 3.1 + vz * 2.3 + x * 5) * Math.cos(vy * 2.7 - z * 3);
+      p.setXYZ(i, vx * k, vy * k * 0.8, vz * k);
+    }
+    g.translate(x, y, z);
+    return g;
+  });
+  const g = mergeParts(parts);
+  const p = g.attributes.position, c = g.attributes.color;
+  for (let i = 0; i < p.count; i++) {
+    const k = 0.5 + 0.5 * THREE.MathUtils.smoothstep(p.getY(i), 2.2, 4.4);
+    c.setXYZ(i, k * (1 + silver * 0.1), k * (1 + silver * 0.12), k * (1 + silver * 0.14));
+  }
+  g.computeVertexNormals();
+  return g;
+}
+
+// Short trunk forking into two leaders, as old olive trees do.
+function forkedTrunk() {
+  const parts = [];
+  const base = new THREE.CylinderGeometry(0.3, 0.46, 1.4, 7, 1, true);
+  base.translate(0, 0.7, 0);
+  parts.push(base);
+  for (const [ax, az] of [[0.35, 0.15], [-0.3, -0.2]]) {
+    const b = new THREE.CylinderGeometry(0.14, 0.24, 1.7, 6, 1, true);
+    b.translate(0, 0.85, 0);
+    b.rotateZ(-ax);
+    b.rotateX(az);
+    b.translate(0, 1.25, 0);
+    parts.push(b);
+  }
+  const g = mergeParts(parts);
+  const p = g.attributes.position, c = g.attributes.color;
+  for (let i = 0; i < p.count; i++) { const k = 0.7 + 0.3 * Math.min(1, p.getY(i) / 2.5); c.setXYZ(i, k, k, k); }
+  return g;
+}
+
 let TREE_GEOS = null;
 function treeGeos() {
   if (TREE_GEOS) return TREE_GEOS;
-  const trunk = new THREE.CylinderGeometry(0.22, 0.4, 2.4, 6);
-  trunk.translate(0, 1.2, 0);
-  const olive = new THREE.IcosahedronGeometry(2.3, 1);
-  olive.scale(1, 0.72, 1);
-  olive.translate(0, 3.1, 0);
-  const broad = new THREE.IcosahedronGeometry(2.6, 1);
-  broad.scale(1.25, 0.7, 1.25);
-  broad.translate(0, 3.0, 0);
+  const trunk = forkedTrunk();
+  const olive = canopy([[0, 3.2, 0, 1.55], [1.05, 2.9, 0.55, 1.15], [-0.95, 3.0, -0.45, 1.2], [0.25, 3.75, -0.75, 1.05], [-0.4, 2.8, 1.0, 1.0]], 1);
+  const broad = canopy([[0, 3.3, 0, 2.0], [1.5, 3.0, 0.7, 1.5], [-1.4, 3.1, -0.6, 1.55], [0.4, 4.1, -1.0, 1.35], [-0.6, 2.9, 1.4, 1.35]], 0);
   TREE_GEOS = { trunk, olive, broad };
   return TREE_GEOS;
 }
@@ -779,8 +817,8 @@ function treeSet(mats, list) {
     p.set(t.x, t.y - 0.2, t.z);
     q.setFromAxisAngle(Y_AXIS, t.r);
     s.set(t.s, t.s * (0.9 + t.k * 0.3), t.s);
-    if (t.broad) c.setRGB(0.24 + t.k * 0.06, 0.34 + t.k * 0.06, 0.16 + t.k * 0.04);
-    else c.setRGB(0.36 + t.k * 0.08, 0.42 + t.k * 0.06, 0.28 + t.k * 0.04);
+    if (t.broad) c.setRGB(0.3 + t.k * 0.07, 0.42 + t.k * 0.07, 0.2 + t.k * 0.05);
+    else c.setRGB(0.44 + t.k * 0.08, 0.5 + t.k * 0.06, 0.36 + t.k * 0.05);
   };
   group.add(instanced(G.trunk, mats.trunk, list, 'city-olive', (t, p, q, s, c) => { setup(t, p, q, s, c); c.setRGB(1, 1, 1); }));
   group.add(instanced(G.olive, mats.olive, list.filter((t) => !t.broad), 'city-olive', setup));
@@ -847,7 +885,7 @@ function vineyards(mats, quality, rand) {
       vines.push({ x: x + (rand() - 0.5) * 0.6, y, z: z + (rand() - 0.5) * 0.6, k: rand() });
     }
   }
-  const geo = new THREE.IcosahedronGeometry(0.62, 0);
+  const geo = paint(new THREE.IcosahedronGeometry(0.62, 0), [1, 1, 1]);
   geo.scale(1, 0.8, 1);
   geo.translate(0, 0.45, 0);
   return instanced(geo, mats.olive, vines, 'city-vines', (v, p, q, s, c) => {

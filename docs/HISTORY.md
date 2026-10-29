@@ -1,6 +1,6 @@
 # Jerusalem in the model: periods, evidence and assumptions
 
-The city and countryside around the temple change with the period you choose. This file lists what is shown in each period and how firm the evidence is.
+The city, the countryside and Solomon's temple change with the period you choose. Ezekiel's temple can be laid over any of them as a vision. This file lists what is shown in each period and how firm the evidence is.
 
 Confidence labels:
 
@@ -10,13 +10,32 @@ Confidence labels:
 
 ## The three periods
 
-| Period | Shown with | What changes |
+| Period | The city | Solomon's temple |
 |---|---|---|
-| **c. 950 BC**: Solomon's Jerusalem | Solomon's temple | City of David and Ophel only. Western Hill is farmland. Smaller temple terrace. High places on the Mount of Corruption. No Siloam pool or tunnel. |
-| **c. 600 BC**: before the fall | Ezekiel's or Solomon's temple | City of David plus the walled Western Hill (Mishneh), Broad Wall, named gates, Hezekiah's tunnel and the Pool of Siloam, Silwan tombs, the 500-cubit Temple Mount square. |
-| **573 BC**: the year of the vision | Ezekiel's temple | Same city burned and broken down: roofless houses, breached walls, a siege ramp, trees cut near the walls, no people in the streets. |
+| **Solomon's time, c. 950 BC** | City of David and Ophel only. Western Hill is farmland. Smaller temple terrace. High places on the Mount of Corruption. No Siloam pool or tunnel. | As built |
+| **Ezekiel's time, c. 600 BC** | City of David plus the walled Western Hill (Mishneh), Broad Wall, named gates, Hezekiah's tunnel and the Pool of Siloam, Silwan tombs, the 500-cubit Temple Mount square. | As altered by Jotham, Ahaz and Hezekiah |
+| **After the fall, 573 BC** | Same city burned and broken down: roofless houses, breached walls, a siege ramp, trees cut near the walls, no people in the streets. | Burned ruin |
 
-Ezekiel's vision is dated "in the fourteenth year after the city was struck down" (Ezek 40:1), which is 573 BC. Showing his temple above the ruined city is the most literal setting. The c. 600 BC view shows the city he knew before he was taken to Babylon in 597 BC.
+Ezekiel was a priest (Ezek 1:3) taken to Babylon in 597 BC, so the c. 600 BC temple is the one he served in. His vision is dated "in the fourteenth year after the city was struck down" (Ezek 40:1), 573 BC, when only the ruin stood on the hill.
+
+**Ezekiel's vision** can be shown three ways: *off*; *glowing*, laid over the period as coloured light; or *solid*, as if built in place of Solomon's temple (c. 600 BC and 573 BC only, because it needs the 500-cubit platform). Its measurements are listed in [MEASUREMENTS.md](MEASUREMENTS.md).
+
+## Solomon's temple by period
+
+| Feature | Period | Confidence | Notes and sources |
+|---|---|---|---|
+| Bronze altar in front of the house | c. 950 BC | Attested; position reconstructed | 2 Chr 4:1; 1 Kgs 8:64. |
+| Ahaz's "great altar" in front, bronze altar moved to its north | c. 600 BC | Attested in text; form and size conjectural | 2 Kgs 16:10–16 (c. 732 BC). Modelled as a three-stage stone altar, 22 × 22 cubits, with a ramp. |
+| The Sea on twelve oxen | c. 950 BC | Attested | 1 Kgs 7:23–26. |
+| The Sea "on a pavement of stones" | c. 600 BC | Attested in text | 2 Kgs 16:17. Jer 52:20 still lists the oxen in 586 BC, so they may have been kept or restored. |
+| Stands with their panels and basins | c. 950 BC | Attested | 1 Kgs 7:27–39. |
+| Stands without panels or basins | c. 600 BC | Attested in text | 2 Kgs 16:17. |
+| Doors overlaid with gold | c. 950 BC | Attested | 1 Kgs 6:31–35. |
+| Doors stripped of their gold | c. 600 BC | Attested in text | Hezekiah, 701 BC (2 Kgs 18:16). No later regilding is recorded. |
+| Upper Gate on the north of the inner court | c. 600 BC | Attested in text; form and position conjectural | Built by Jotham (2 Kgs 15:35); Jer 20:2; 36:10; Ezek 8:3–5; 9:2. |
+| House and palace burned, roofless, walls broken | 573 BC | Attested in text; wall heights conjectural | 2 Kgs 25:9; Jer 52:13; Lam 2:7. |
+| Pillars, Sea and stands gone | 573 BC | Attested | Broken up and carried to Babylon (2 Kgs 25:13–17; Jer 52:17–23). |
+| Weeds and jackals in the courts | 573 BC | Attested in text | Lam 5:18; Mic 3:12; Jer 26:18. |
 
 ## City size and walls
 
@@ -75,11 +94,13 @@ Ezekiel's vision is dated "in the fourteenth year after the city was struck down
 | Field towers, threshing floors, sheepfolds | Attested types; positions generated | Isa 5:2; 2 Sam 24:18; Num 32:16. |
 | Roads | Probable | To Jericho over the Mount of Olives (2 Sam 15:30), north to Benjamin and Ephraim, west to the coast, south-west to Bethlehem, and down the Kidron ("the way of the Arabah", 2 Kgs 25:4). |
 | Judean desert east of the Mount of Olives | Attested | Rain shadow; chalky, treeless slopes. |
+| Limestone outcrops and thorny scrub (batha) | Attested type; positions generated | Thicker on steep, uncultivated slopes; fields were cleared of stones (Isa 5:2) and overgrown when neglected (Isa 5:6; 7:23–25). |
+| The Dead Sea and the hills of Moab on the eastern horizon | Attested; relief schematic | The rift lies about 22–34 km east, its surface about 400 m below sea level; the Moab plateau rises beyond it to about 900–1,000 m. |
 
 ## People and animals
 
-Figures give scale and show how spaces were used: priests in linen in the inner courts (Ezek 44:17–19), the people in the outer courts, Levite singers east of Solomon's altar (2 Chr 5:12), elders at the city gates (Prov 31:23), farmers, travellers with donkeys, and mixed flocks of fat-tailed sheep and black goats (Lev 3:9; Song 4:1). In Ezekiel's 573 BC view the only figures in the temple are Ezekiel and the man with the measuring reed (Ezek 40:3).
+Figures give scale and show how spaces were used: priests in linen in the inner courts (Ezek 44:17–19), the people in the outer courts, Levite singers east of Solomon's altar (2 Chr 5:12), elders at the city gates (Prov 31:23), farmers, travellers with donkeys, and mixed flocks of fat-tailed sheep and black goats (Lev 3:9; Song 4:1). With Ezekiel's temple shown solid, the only figures in it in 573 BC are Ezekiel and the man with the measuring reed (Ezek 40:3). In the ruins of 573 BC there are no people in the temple courts, only jackals (Lam 5:18).
 
 ## Terrain
 
-The terrain is a schematic model built from published elevations (Temple Mount summit 743 m, Mount of Olives 818 m, Gihon Spring about 636 m, En-rogel about 600 m) and approximate valley courses. It is not survey data.
+The terrain is a schematic model built from published elevations (Temple Mount summit 743 m, Mount of Olives 818 m, Gihon Spring about 636 m, En-rogel about 600 m) and approximate valley courses. Beyond the city it settles onto the plateau (about 850 m to the north and toward Bethlehem), falls east through the desert into the Dead Sea rift and west toward the Shephelah. It is not survey data.

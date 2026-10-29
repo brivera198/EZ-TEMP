@@ -67,19 +67,35 @@ export function valleyX(name, z) {
 
 // Natural elevation (metres above sea level).
 export function naturalElevation(x, z) {
-  let h = 735 - 0.045 * z + 0.02 * Math.max(0, -z);
+  // Rising to the north; falling to the Kidron–Hinnom junction in the south,
+  // then rising again toward Bethlehem. Both settle onto the plateau far out.
+  const n = Math.max(0, -z), s = Math.max(0, z);
+  let h = 735 + (n < 1500 ? 0.065 * n : 97.5 + 52.5 * (1 - Math.exp(-(n - 1500) / 1500)));
+  h += -0.045 * Math.min(s, 1400) + 0.06 * Math.min(Math.max(0, s - 1400), 2600);
   h += 82 * gauss(x - 880, z + 80, 330, 1100);                  // Mount of Olives ridge
   h += 4 * gauss(x - 10, z, 160, 220);                          // Temple Mount summit
   h += 13 * gauss(x - 25, z - 500, 90, 300);                    // City of David spur
   h += 30 * gauss(x + 560, z - 420, 330, 380);                  // Western Hill
   h += 35 * smooth(-100, -900, x) * (1 - smooth(400, 1300, z)); // high ground to the north-west
   h -= 0.035 * Math.max(0, x - 1300);                           // falling away to the Judean desert
+  h -= 0.053 * Math.max(0, x - 12000);                          // its last drop toward the rift
+  h -= 0.022 * Math.max(0, -x - 5000);                          // west, down toward the Shephelah
   const far = Math.hypot(x, z - 300);
   h += fbm(x / 900, z / 900, 3) * 40 * smooth(1500, 4000, far);
+  h += fbm(x / 4200 + 3.1, z / 4200 - 1.7, 3) * 160 * smooth(9000, 22000, far);
   h += fbm(x / 140, z / 140, 3) * 4;
+  // The Dead Sea rift, about 22–34 km east, and the Moab plateau beyond it.
+  const rift = smooth(19500, 22000, x) * (1 - smooth(32500, 34800, x));
+  if (rift > 0) h = h * (1 - rift) + (z > -1500 ? -430 : -400 + Math.min(150, 0.02 * (-z - 1500))) * rift;
+  const moab = smooth(33500, 38500, x);
+  if (moab > 0) h = h * (1 - moab) + (900 + 170 * fbm(x / 2600, z / 2600, 4) + 120 * gauss(x - 45000, z - 1000, 3500, 5000)) * moab;
+  if (x < -20000) h = Math.max(h, 60 + 30 * fbm(x / 2000, z / 2000, 2));   // the coastal plain
   for (const v of Object.values(VALLEYS)) h = Math.min(h, valleyHeight(v, x, z));
   return h;
 }
+
+// Surface of the Dead Sea (metres above sea level) and its extent in the model.
+export const DEAD_SEA = { level: -400, x0: 21200, x1: 33600, z0: -1500, z1: 56000 };
 
 // --- Platforms ------------------------------------------------------------------
 // 'square': the 500-cubit Temple Mount of the later monarchy (and of Ezekiel).
@@ -135,6 +151,7 @@ const C = {
   rock: new THREE.Color(0.60, 0.56, 0.48),
   scrub: new THREE.Color(0.40, 0.43, 0.30),
   chalk: new THREE.Color(0.80, 0.70, 0.52),
+  moab: new THREE.Color(0.62, 0.47, 0.35),
 };
 const tmp = new THREE.Color();
 
@@ -147,7 +164,8 @@ function vertexColour(x, y, z, ny, out, i) {
   c.lerp(C.scrub, Math.min(0.75, green * 0.55 + low * 0.35));
   // East of the Mount of Olives: the chalky Judean desert.
   const desert = smooth(1050, 1900, x + 120 * fbm(x / 500, z / 500, 2));
-  c.lerp(C.chalk, desert * 0.85);
+  c.lerp(C.chalk, desert * 0.85 * (1 - smooth(30000, 36000, x)));
+  c.lerp(C.moab, smooth(30000, 36000, x) * 0.8);
   out[i * 3] = c.r; out[i * 3 + 1] = c.g; out[i * 3 + 2] = c.b;
 }
 
@@ -196,10 +214,44 @@ export function buildTerrain(mats, { seg = DETAIL.seg } = {}) {
   }
   far.computeVertexNormals();
   colourTerrain(far);
+  // A skirt round the edge hides the seam with the horizon mesh.
+  for (let i = 0; i < fp.count; i++) {
+    if (Math.abs(Math.abs(fp.getX(i) - DETAIL.cx) - 13000) < 1 || Math.abs(Math.abs(fp.getZ(i) - DETAIL.cz) - 13000) < 1) fp.setY(i, fp.getY(i) - 60);
+  }
   const farMesh = new THREE.Mesh(far, mats.terrain);
   farMesh.receiveShadow = true;
   farMesh.name = 'terrain-far';
   group.add(farMesh);
+
+  // Horizon: the Judean desert, the Dead Sea and the hills of Moab to the east,
+  // the slopes toward the coast to the west. Hidden under the surround nearby.
+  const hz = new THREE.PlaneGeometry(150000, 150000, 150, 150);
+  hz.rotateX(-Math.PI / 2);
+  hz.translate(DETAIL.cx + 12000, 0, DETAIL.cz + 8000);
+  const hp = hz.attributes.position;
+  const inner = (i) => Math.abs(hp.getX(i) - DETAIL.cx) < 12000 && Math.abs(hp.getZ(i) - DETAIL.cz) < 12000;
+  for (let i = 0; i < hp.count; i++) {
+    const x = hp.getX(i), z = hp.getZ(i);
+    hp.setY(i, naturalElevation(x, z) - Y0 - (inner(i) ? 300 : 0));
+  }
+  // Its kilometre-wide triangles would cut through the valleys nearby, so it
+  // keeps only a ring that tucks under the edge of the surround.
+  const idx = hz.index.array, ring = [];
+  for (let t = 0; t < idx.length; t += 3) {
+    if (!(inner(idx[t]) && inner(idx[t + 1]) && inner(idx[t + 2]))) ring.push(idx[t], idx[t + 1], idx[t + 2]);
+  }
+  hz.setIndex(ring);
+  hz.computeVertexNormals();
+  colourTerrain(hz);
+  const horizon = new THREE.Mesh(hz, mats.terrain);
+  horizon.name = 'terrain-horizon';
+  group.add(horizon);
+  const sea = new THREE.PlaneGeometry(DEAD_SEA.x1 - DEAD_SEA.x0, DEAD_SEA.z1 - DEAD_SEA.z0);
+  sea.rotateX(-Math.PI / 2);
+  sea.translate((DEAD_SEA.x0 + DEAD_SEA.x1) / 2, DEAD_SEA.level - Y0, (DEAD_SEA.z0 + DEAD_SEA.z1) / 2);
+  const deadSea = new THREE.Mesh(sea, mats.deadSea);
+  deadSea.name = 'dead-sea';
+  group.add(deadSea);
   return { group, mesh, farMesh, seg };
 }
 
@@ -259,6 +311,19 @@ const OVERLAY_GLSL = /* glsl */ `
 }
 `;
 
+// The ground texture projected from three sides and blended by the normal,
+// so steep slopes and cuttings are not smeared.
+const TRIPLANAR_GLSL = /* glsl */ `
+#ifdef USE_MAP
+{
+  vec3 tw = pow(abs(normalize(vWNorm)), vec3(4.0));
+  tw /= tw.x + tw.y + tw.z;
+  vec4 sampledDiffuseColor = texture2D(map, vWPos.zy / 24.0) * tw.x + texture2D(map, vWPos.xz / 24.0) * tw.y + texture2D(map, vWPos.xy / 24.0) * tw.z;
+  diffuseColor *= sampledDiffuseColor;
+}
+#endif
+`;
+
 export function installTerrainShader(mat) {
   const blank = new THREE.DataTexture(new Uint8Array(4), 1, 1);
   blank.needsUpdate = true;
@@ -275,9 +340,10 @@ export function installTerrainShader(mat) {
       .replace('#include <begin_vertex>', '#include <begin_vertex>\nvWPos = (modelMatrix * vec4(transformed, 1.0)).xyz;\nvWNorm = normalize(mat3(modelMatrix) * objectNormal);');
     shader.fragmentShader = shader.fragmentShader
       .replace('#include <common>', '#include <common>\nuniform sampler2D ovColor;\nuniform sampler2D ovMask;\nuniform vec4 ovRect;\nvarying vec3 vWPos;\nvarying vec3 vWNorm;')
+      .replace('#include <map_fragment>', TRIPLANAR_GLSL)
       .replace('#include <color_fragment>', '#include <color_fragment>\n' + OVERLAY_GLSL);
   };
-  mat.customProgramCacheKey = () => 'terrain-overlay-v1';
+  mat.customProgramCacheKey = () => 'terrain-overlay-v3';
 }
 
 // Hezekiah's tunnel, Gihon to Siloam (it runs underground).

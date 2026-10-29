@@ -58,6 +58,8 @@ button:focus-visible, input:focus-visible, select:focus-visible { outline: 2px s
 .label.city::before { background: #c98b5a; }
 .label.man::before { background: #b9824a; }
 .label.has-info { pointer-events: auto; cursor: pointer; }
+body[data-vision="glow"] .label.ez { border-color: rgba(255, 210, 122, 0.35); color: #fff3d6; }
+body[data-vision="glow"] .label.ez::before { background: #ffd27a; box-shadow: 0 0 6px #ffd27a; }
 .label.has-info:hover { border-color: var(--accent); }
 
 /* Brand + mode switch */
@@ -71,19 +73,23 @@ button:focus-visible, input:focus-visible, select:focus-visible { outline: 2px s
 }
 .brand h1 .he { font-weight: 500; font-size: 0.72em; color: var(--accent); margin-left: 8px; }
 .brand .sub { font: 12px/1.3 var(--font-mono); color: var(--stone); opacity: 0.85; text-shadow: 0 1px 8px rgba(0, 0, 0, 0.7); }
-.modes { display: inline-flex; background: var(--panel); border: 1px solid var(--line); border-radius: 999px; padding: 3px; backdrop-filter: blur(8px); align-self: flex-start; }
+.modes { display: inline-flex; background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 3px; backdrop-filter: blur(8px); align-self: flex-start; }
 .modes button {
-  border: 0; background: transparent; padding: 6px 12px; border-radius: 999px; cursor: pointer;
-  font-size: 13.5px; font-weight: 500; color: var(--muted); white-space: nowrap;
+  border: 0; background: transparent; padding: 5px 11px 6px; border-radius: 9px; cursor: pointer;
+  display: flex; flex-direction: column; align-items: flex-start; gap: 1px; color: var(--muted); white-space: nowrap;
 }
-.modes button[aria-pressed="true"] { background: var(--accent); color: #17130b; }
-.periods { display: inline-flex; gap: 2px; background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 2px; backdrop-filter: blur(8px); align-self: flex-start; }
-.periods[hidden] { display: none; }
-.periods button {
-  border: 0; background: transparent; padding: 4px 10px; border-radius: 6px; cursor: pointer;
-  font: 500 12.5px/1.2 var(--font-mono); color: var(--muted); white-space: nowrap; font-variant-numeric: tabular-nums;
+.modes button b { font-size: 13.5px; font-weight: 600; }
+.modes button small { font: 500 11px/1.2 var(--font-mono); font-variant-numeric: tabular-nums; opacity: 0.85; }
+.modes button[aria-pressed="true"] { background: var(--lapis); color: #0e1520; }
+.vision { display: inline-flex; align-items: center; gap: 2px; background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 2px 2px 2px 10px; backdrop-filter: blur(8px); align-self: flex-start; }
+.vision .vlabel { font: 600 11px/1 var(--font-mono); text-transform: uppercase; letter-spacing: 0.1em; color: var(--muted); margin-right: 6px; }
+.vision button {
+  border: 0; background: transparent; padding: 5px 10px; border-radius: 6px; cursor: pointer;
+  font-size: 13px; font-weight: 500; color: var(--muted); white-space: nowrap;
 }
-.periods button[aria-pressed="true"] { background: rgba(236, 227, 207, 0.16); color: var(--stone); box-shadow: inset 0 -2px 0 var(--accent); }
+.vision button[aria-pressed="true"] { background: var(--gold); color: #17130b; }
+.vision button[data-vision="glow"][aria-pressed="true"] { background: linear-gradient(90deg, #4fe0d6, #ffd27a); box-shadow: 0 0 14px rgba(255, 210, 122, 0.45); }
+.vision button:disabled { opacity: 0.35; cursor: not-allowed; }
 .chip {
   align-self: flex-start; border: 1px solid var(--line); background: var(--panel); border-radius: 999px;
   padding: 4px 11px; font-size: 12.5px; color: var(--muted); cursor: pointer; backdrop-filter: blur(8px);
@@ -97,7 +103,7 @@ body.panels-hidden #views, body.panels-hidden #info { display: none; }
   backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
   overflow: auto; overscroll-behavior: contain;
 }
-#views { top: calc(214px + env(safe-area-inset-top, 0px)); left: calc(14px + env(safe-area-inset-left, 0px)); width: 248px; max-height: calc(100% - 276px); padding: 12px; }
+#views { top: calc(236px + env(safe-area-inset-top, 0px)); left: calc(14px + env(safe-area-inset-left, 0px)); width: 248px; max-height: calc(100% - 298px); padding: 12px; }
 #info { top: calc(14px + env(safe-area-inset-top, 0px)); right: calc(14px + env(safe-area-inset-right, 0px)); width: 370px; max-height: calc(100% - 80px); display: flex; flex-direction: column; overflow: hidden; }
 .panel h3 {
   margin: 0 0 6px; font: 600 11px/1 var(--font-mono); text-transform: uppercase; letter-spacing: 0.12em; color: var(--muted);
@@ -108,6 +114,14 @@ body.panels-hidden #views, body.panels-hidden #info { display: none; }
   text-align: left; border: 0; background: transparent; padding: 6px 8px; border-radius: 6px; cursor: pointer; font-size: 14px;
 }
 .views-list button:hover { background: rgba(236, 227, 207, 0.08); }
+.views-head { font: 600 10.5px/1 var(--font-mono); text-transform: uppercase; letter-spacing: 0.1em; color: var(--muted); padding: 10px 8px 4px; }
+.views-head:first-child { padding-top: 2px; }
+#vision-panel .strength { display: flex; align-items: center; gap: 10px; margin: 2px 0 8px; font-size: 13px; color: var(--muted); }
+#vision-panel .strength input { flex: 1; accent-color: #ffd27a; }
+#legend { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: 1fr 1fr; gap: 5px 10px; }
+#legend li { display: flex; gap: 7px; align-items: center; font-size: 12.5px; line-height: 1.25; color: var(--stone); cursor: help; }
+#legend li i { flex: none; width: 10px; height: 10px; border-radius: 3px; }
+#vision-panel[hidden] + .section { margin-top: 0; padding-top: 0; border-top: 0; }
 .views-list button.active { background: rgba(236, 227, 207, 0.12); box-shadow: inset 2px 0 0 var(--accent); }
 .layers label { display: flex; align-items: center; gap: 8px; font-size: 14px; padding: 3px 0; cursor: pointer; }
 .layers input { accent-color: var(--accent); width: 15px; height: 15px; }
@@ -178,6 +192,10 @@ body.walking #walkpad.touch { display: grid; }
 
 @media (max-width: 860px) {
   .brand h1 { font-size: 24px; }
+  .modes button { padding: 4px 8px 5px; }
+  .modes button b { font-size: 12.5px; }
+  .vision .vlabel { display: none; }
+  .vision button { padding: 4px 8px; font-size: 12.5px; }
   .brand .sub, .chip { display: none; }
   #views, #info {
     left: calc(10px + env(safe-area-inset-left, 0px)); right: calc(10px + env(safe-area-inset-right, 0px));
@@ -201,28 +219,34 @@ body.walking #walkpad.touch { display: grid; }
 }
 </style>
 </head>
-<body data-mode="ez">
+<body data-mode="ez" data-vision="glow">
 <div id="app">
   <canvas id="scene" tabindex="0" aria-label="3D model of the temple on the map of Jerusalem"></canvas>
   <div id="labels" aria-hidden="true"></div>
 
   <header class="brand">
     <h1><span id="title">Ezekiel's Temple</span> <span class="he" lang="he">מִקְדָּשׁ</span></h1>
-    <div class="sub" id="sub">Ezekiel 40–48 · long cubit 52.5 cm · Jerusalem</div>
-    <div class="modes" role="group" aria-label="Which temple">
-      <button type="button" data-mode="ez" aria-pressed="true">Ezekiel</button>
-      <button type="button" data-mode="so" aria-pressed="false">Solomon</button>
-      <button type="button" data-mode="overlay" aria-pressed="false">Overlay</button>
+    <div class="sub" id="sub">Ezekiel's time, c. 600 BC · vision overlaid</div>
+    <div class="modes" role="group" aria-label="Period: the city and temple as they stood">
+      <button type="button" data-period="early" aria-pressed="false"><b>Solomon's time</b><small>c. 950 BC</small></button>
+      <button type="button" data-period="late" aria-pressed="true"><b>Ezekiel's time</b><small>c. 600 BC</small></button>
+      <button type="button" data-period="ruin" aria-pressed="false"><b>After the fall</b><small>573 BC</small></button>
     </div>
-    <div class="periods" role="group" aria-label="Period">
-      <button type="button" data-period="early" aria-pressed="false">c. 950 BC</button>
-      <button type="button" data-period="late" aria-pressed="true">c. 600 BC</button>
-      <button type="button" data-period="ruin" aria-pressed="false">573 BC</button>
+    <div class="vision" role="group" aria-label="Ezekiel's vision">
+      <span class="vlabel">Ezekiel's vision</span>
+      <button type="button" data-vision="off" aria-pressed="false">Off</button>
+      <button type="button" data-vision="glow" aria-pressed="true">Glowing</button>
+      <button type="button" data-vision="solid" aria-pressed="false">Solid</button>
     </div>
     <button type="button" class="chip" id="toggle-panels" aria-pressed="false">Hide panels</button>
   </header>
 
   <aside id="views" class="panel" aria-label="Views and layers">
+    <div class="section" id="vision-panel">
+      <h3>Vision colours</h3>
+      <label class="strength">Strength <input type="range" id="strength" min="0.15" max="1.6" step="0.05" value="0.85" aria-label="Strength of the vision overlay"></label>
+      <ul id="legend"></ul>
+    </div>
     <div class="section">
       <h3>Views</h3>
       <div class="views-list" id="views-list"></div>

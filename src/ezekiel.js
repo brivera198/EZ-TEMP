@@ -5,6 +5,7 @@ import * as THREE from 'three';
 import { Builder, aeolicCapital } from './builder.js';
 import { CUBIT, LEVEL, EZ_CENTER_X, BASE_Y, CITY_GATES } from './data.js';
 import { terrainY } from './terrain.js';
+import { VISION_SKIP } from './vision.js';
 
 const O = LEVEL.outer;   // 3.5  outer court
 const I = LEVEL.inner;   // 7.5  inner court
@@ -96,7 +97,9 @@ function hearth(bld, fires, u, v, y) {
   fires.push({ u, v, y: y + 1.5, s: 0.9 });
 }
 
-export function buildEzekiel(mats) {
+// With `vision` (from makeVisionLooks), the same plan is merged by part type
+// into the glowing overlay instead of solid stone.
+export function buildEzekiel(mats, { vision = null } = {}) {
   const bld = new Builder(mats);
   const group = new THREE.Group();
   group.position.set(EZ_CENTER_X, BASE_Y, 0);
@@ -105,6 +108,7 @@ export function buildEzekiel(mats) {
   const fires = [];
 
   // --- Outer court, pavement, wall (40:5, 17–19; 42:15–20) ------------------
+  bld.tag = 'court';
   bld.box('earth', -244, 244, 0, O, -244, 244);
   bld.zone('ez-outer-court', -244, 244, O - 0.2, O + 0.25, -244, 244);
   const strips = [[-244, 244, -244, -200], [-244, 244, 200, 244], [200, 244, -200, 200], [-244, -200, -200, 200]];
@@ -113,6 +117,7 @@ export function buildEzekiel(mats) {
     bld.zone('ez-pavement', u0, u1, O - 0.2, O + 0.3, v0, v1);
   }
   const wallTop = O + 6; // one reed above the court (40:5)
+  bld.tag = 'wall';
   const walls = [
     [-250, -13.5, -250, -244], [13.5, 250, -250, -244],   // north
     [-250, -13.5, 244, 250], [13.5, 250, 244, 250],       // south
@@ -126,6 +131,7 @@ export function buildEzekiel(mats) {
   }
 
   // --- Gates -----------------------------------------------------------------
+  bld.tag = 'gate';
   labels.push(gate(bld, { u0: 250, v0: 0, du: -1, dv: 0, floor: O, below: 0, steps: 7, porchOut: false, shut: true, id: 'ez-gate-east', label: 'East gate (shut)' }));
   labels.push(gate(bld, { u0: 0, v0: -250, du: 0, dv: 1, floor: O, below: 0, steps: 7, porchOut: false, id: 'ez-gate-outer', label: 'North gate' }));
   labels.push(gate(bld, { u0: 0, v0: 250, du: 0, dv: -1, floor: O, below: 0, steps: 7, porchOut: false, id: 'ez-gate-outer', label: 'South gate' }));
@@ -134,6 +140,7 @@ export function buildEzekiel(mats) {
   labels.push(gate(bld, { u0: 0, v0: 100, du: 0, dv: -1, floor: I, below: O, steps: 8, porchOut: true, id: 'ez-gate-inner', label: 'Inner south gate' }));
 
   // --- Thirty chambers on the pavement (40:17) ---------------------------------
+  bld.tag = 'chamber';
   const spans = [[25, 55], [59, 89], [93, 123], [127, 157], [161, 191]];
   for (const s of [-1, 1]) {
     for (const [a, b] of spans) for (const k of [-1, 1]) {
@@ -166,9 +173,11 @@ export function buildEzekiel(mats) {
   }
 
   // --- Inner court (40:47) ---------------------------------------------------
+  bld.tag = 'court';
   bld.box('pavement', -150, 50, O, I, -50, 50);
   bld.zone('ez-inner-court', -50, 50, I - 0.2, I + 0.3, -50, 50);
   const iw = I + 5;
+  bld.tag = 'wall';
   const innerWalls = [
     [47, 50, -50, -13.5], [47, 50, 13.5, 50],
     [-150, -13.5, -50, -47], [13.5, 50, -50, -47],
@@ -184,12 +193,14 @@ export function buildEzekiel(mats) {
   }
 
   // Chambers for the priests on duty (40:44–46)
+  bld.tag = 'chamber';
   room(bld, 16, 40, -47, -37, I, 8, 's');
   room(bld, 16, 40, 37, 47, I, 8, 'n');
   bld.zone('ez-singers', 16, 40, I, I + 8.5, -47, -37);
   bld.zone('ez-singers', 16, 40, I, I + 8.5, 37, 47);
 
   // Tables at the north inner gate (40:39–42)
+  bld.tag = 'altar';
   for (const s of [-1, 1]) {
     for (const vc of [-97, -93.5]) bld.box('ashlarDark', s * 9.5 - 0.75, s * 9.5 + 0.75, I, I + 1.4, vc - 1.25, vc + 1.25);
     for (const uc of [16.5, 20]) {
@@ -217,6 +228,7 @@ export function buildEzekiel(mats) {
   labels.push({ label: 'Altar', pos: toWorld(0, I + 16, 0) });
 
   // --- The house (40:48–41:26) -----------------------------------------------------
+  bld.tag = 'house';
   const top = H + HOUSE_H;
   bld.box('ashlar', -150, -47, I, H, -30, 30);                       // platform, a full reed (41:8)
   bld.zone('ez-platform', -150, -37, I, H, -30, 30);
@@ -294,6 +306,7 @@ export function buildEzekiel(mats) {
   labels.push({ label: 'The house', pos: toWorld(-95, top + 8, 0) });
 
   // --- Priests' chambers (42:1–14) and kitchens (46:19–20) -----------------------------
+  bld.tag = 'chamber';
   for (const s of [-1, 1]) {
     const sv = (a, b) => [s * a, s * b];
     // inner row, 100 long, stepped back on the walk side
@@ -325,9 +338,11 @@ export function buildEzekiel(mats) {
   labels.push({ label: 'Priests\' chambers', pos: toWorld(-100, O + 24, -75) });
 
   // --- Separate place and western building (41:12–15) --------------------------
+  bld.tag = 'court';
   bld.box('pavement', -170, -150, O, O + 0.06, -50, 50);
   bld.zone('ez-gizrah', -170, -150, O - 0.2, O + 0.3, -50, 50);
   const bTop = O + 20;
+  bld.tag = 'binyan';
   bld.box('ashlar', -250, -245, 0, bTop, -50, 50);
   bld.box('ashlar', -245, -175, O, bTop, -50, -45);
   bld.box('ashlar', -245, -175, O, bTop, 45, 50);
@@ -340,8 +355,10 @@ export function buildEzekiel(mats) {
   bld.zone('ez-binyan', -250, -170, 0, bTop + 0.8, -50, 50);
   labels.push({ label: 'Western building', pos: toWorld(-210, bTop + 6, 0) });
 
+  if (vision) return { group, zones: bld.finishVision(group, vision.looks, VISION_SKIP), labels };
+
   // --- Interior lighting -----------------------------------------------------------
-  const nave = new THREE.PointLight(0xffc27a, 70, 40, 2);
+  const nave = new THREE.PointLight(0xffc27a, 45, 40, 2);
   nave.position.set(-93, H + 18, 0);
   const glory = new THREE.PointLight(0xfff1d0, 120, 30, 2);       // "the glory of the LORD filled the house" (43:5)
   glory.position.set(-125, H + 14, 0);
@@ -350,13 +367,12 @@ export function buildEzekiel(mats) {
   const zones = bld.finish(group);
 
   // Fires (altar, kitchens) are separate so they can flicker.
-  const fireGeo = new THREE.ConeGeometry(0.5, 1.6, 7, 1, true);
-  fireGeo.translate(0, 0.8, 0);
   const fireMeshes = [];
   for (const f of fires) {
     const n = f.big ? 9 : 3;
     for (let i = 0; i < n; i++) {
-      const m = new THREE.Mesh(fireGeo, mats.fire);
+      const m = new THREE.Sprite(mats.fire);
+      m.center.set(0.5, 0.03);
       const r = f.big ? 3.5 : 0.6;
       m.position.set(f.u + (Math.random() - 0.5) * r, f.y, f.v + (Math.random() - 0.5) * r);
       m.userData.base = f.s * (0.7 + Math.random() * 0.5);

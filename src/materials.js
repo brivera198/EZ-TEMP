@@ -79,6 +79,70 @@ function ashlar(seed, base, { rows = 6, size = 512, minLen = 1.6, maxLen = 3.4, 
   return [toTex(c), toTex(cb, false)];
 }
 
+// Fire-damaged ashlar: soot streaks rising from the openings and limestone
+// calcined pink and grey by the heat (as in the burned houses of 586 BC).
+function burnt(seed) {
+  const [map, bump] = ashlar(seed, [176, 160, 136], { minLen: 1.8, maxLen: 3.8 });
+  const g = map.image.getContext('2d');
+  const rand = rng(seed + 5);
+  const size = map.image.width;
+  for (let i = 0; i < 26; i++) {
+    const x = rand() * size, r = 40 + rand() * 120, y = rand() * size;
+    const grad = g.createRadialGradient(x, y, 0, x, y, r);
+    grad.addColorStop(0, `rgba(24,19,14,${0.12 + rand() * 0.22})`);
+    grad.addColorStop(1, 'rgba(24,19,14,0)');
+    g.fillStyle = grad;
+    g.fillRect(x - r, y - r, r * 2, r * 2);
+  }
+  for (let i = 0; i < 40; i++) {
+    g.fillStyle = rand() < 0.5 ? `rgba(196,120,96,${0.12 + rand() * 0.15})` : `rgba(90,86,80,${0.12 + rand() * 0.2})`;
+    g.beginPath();
+    g.arc(rand() * size, rand() * size, 14 + rand() * 50, 0, Math.PI * 2);
+    g.fill();
+  }
+  map.needsUpdate = true;
+  return [map, bump];
+}
+
+// A tongue of flame: hot white-yellow core fading through orange to nothing.
+function flameTex() {
+  const [c, g] = canvas(64, 128);
+  const grad = g.createRadialGradient(32, 104, 2, 32, 86, 60);
+  grad.addColorStop(0, 'rgba(255,250,220,1)');
+  grad.addColorStop(0.25, 'rgba(255,200,90,0.9)');
+  grad.addColorStop(0.55, 'rgba(240,110,30,0.45)');
+  grad.addColorStop(1, 'rgba(200,50,10,0)');
+  g.fillStyle = grad;
+  g.beginPath();
+  g.moveTo(32, 2);
+  g.bezierCurveTo(54, 50, 62, 92, 50, 116);
+  g.quadraticCurveTo(32, 128, 14, 116);
+  g.bezierCurveTo(2, 92, 10, 50, 32, 2);
+  g.fill();
+  const t = new THREE.CanvasTexture(c);
+  t.colorSpace = THREE.SRGBColorSpace;
+  return t;
+}
+
+// Greyscale relief for plaster, beaten earth and bare ground.
+function grain(seed, size = 256, blobs = 500, fine = 6000) {
+  const rand = rng(seed);
+  const [c, g] = canvas(size, size);
+  g.fillStyle = '#808080';
+  g.fillRect(0, 0, size, size);
+  for (let i = 0; i < blobs; i++) {
+    const v = 100 + rand() * 60 | 0;
+    g.fillStyle = `rgba(${v},${v},${v},0.35)`;
+    const r = 3 + rand() * 14, x = rand() * size, y = rand() * size;
+    for (const [ox, oy] of [[0, 0], [size, 0], [-size, 0], [0, size], [0, -size]]) {
+      g.beginPath(); g.arc(x + ox, y + oy, r, 0, Math.PI * 2); g.fill();
+    }
+  }
+  speckle(g, size, size, fine, rand, '#303030', 1.4);
+  speckle(g, size, size, fine / 2, rand, '#e0e0e0', 1.2);
+  return toTex(c, false);
+}
+
 // Large square flagstones.
 function flagstones(seed, base, size = 512) {
   const rand = rng(seed);
@@ -413,6 +477,10 @@ export function makeMaterials() {
   const plankMap = planks(6, [138, 78, 44]);
   const water = waterNormals();
   water.repeat.set(1, 1);
+  const [burntMap, burntBump] = burnt(31);
+  const [debMap, debBump] = rubble(33, [150, 138, 120], { joint: 0.55, count: 380, rx: [8, 26], ry: [6, 18] });
+  const plasterBump = grain(41);
+  const earthBump = grain(42, 256, 700, 9000);
 
   const m = {
     ashlar: std({ map: ashMap, bumpMap: ashBump, bumpScale: 1.4, roughness: 0.86 }, 6),
@@ -420,16 +488,16 @@ export function makeMaterials() {
     podium: std({ map: podMap, bumpMap: podBump, bumpScale: 1.8, roughness: 0.92 }, 10),
     pavement: std({ map: paveMap, bumpMap: paveBump, bumpScale: 0.8, roughness: 0.8 }, 8),
     rubble: std({ map: rubMap, bumpMap: rubBump, bumpScale: 2, roughness: 0.95 }, 6),
-    plaster: std({ map: mottled(7, [226, 214, 190], 0.12), roughness: 0.95 }, 10),
-    earth: std({ map: mottled(8, [196, 172, 136], 0.18), roughness: 1 }, 12),
-    roof: std({ map: mottled(10, [190, 172, 142], 0.2), roughness: 1 }, 10),
+    plaster: std({ map: mottled(7, [226, 214, 190], 0.12), bumpMap: plasterBump, bumpScale: 0.6, roughness: 0.95 }, 10),
+    earth: std({ map: mottled(8, [196, 172, 136], 0.18), bumpMap: earthBump, bumpScale: 1.2, roughness: 1 }, 12),
+    roof: std({ map: mottled(10, [190, 172, 142], 0.2), bumpMap: earthBump, bumpScale: 1, roughness: 1 }, 10),
     cedar: std({ map: plankMap, roughness: 0.7 }, 4),
     cedarCarved: std({ map: cedarMap, bumpMap: cedarBump, bumpScale: 3, roughness: 0.62 }, 10),
     palmStone: std({ map: palmMap, bumpMap: palmBump, bumpScale: 2, roughness: 0.85 }, 6),
     goldCarved: std({ map: goldMap, bumpMap: goldBump, bumpScale: 3, metalness: 0.9, roughness: 0.32 }, 10),
-    gold: std({ color: 0xe0ae48, metalness: 1, roughness: 0.24 }, 4),
+    gold: std({ color: 0xe0ae48, metalness: 1, roughness: 0.42, roughnessMap: plasterBump }, 4),
     goldFloor: std({ color: 0xd6a443, metalness: 0.25, roughness: 0.45, map: mottled(13, [240, 220, 170], 0.12) }, 6),
-    bronze: std({ color: 0xa8703a, metalness: 0.92, roughness: 0.36 }, 4),
+    bronze: std({ color: 0x9c6a3c, metalness: 0.9, roughness: 0.6, roughnessMap: earthBump, bumpMap: plasterBump, bumpScale: 0.4 }, 4),
     window: std({ map: lattice(), roughness: 0.9 }, 2),
     door: std({ map: cedarMap, bumpMap: cedarBump, bumpScale: 2, roughness: 0.6 }, 10),
     veil: new THREE.MeshStandardMaterial({ map: veilTex(), roughness: 0.95, side: THREE.DoubleSide }),
@@ -437,11 +505,11 @@ export function makeMaterials() {
       color: 0x2f7f8c, roughness: 0.06, metalness: 0.15, normalMap: water,
       normalScale: new THREE.Vector2(0.8, 0.8), transparent: true, opacity: 0.9,
     }),
-    fire: new THREE.MeshBasicMaterial({ color: 0xe8561a, transparent: true, opacity: 0.55, blending: THREE.AdditiveBlending, depthWrite: false }),
+    fire: new THREE.SpriteMaterial({ map: flameTex(), color: 0xffffff, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false }),
     ember: new THREE.MeshStandardMaterial({ color: 0x2a1408, emissive: 0xff5a10, emissiveIntensity: 1.6, roughness: 1 }),
     linen: std({ color: 0xf1ebdc, roughness: 1 }, 4),
-    terrain: new THREE.MeshStandardMaterial({ map: groundDetail(), vertexColors: true, roughness: 0.97 }),
-    house: new THREE.MeshStandardMaterial({ map: mottled(12, [222, 212, 196], 0.14), roughness: 1, vertexColors: true }),
+    terrain: new THREE.MeshStandardMaterial({ map: groundDetail(), bumpMap: earthBump, bumpScale: 1.5, vertexColors: true, roughness: 0.97 }),
+    house: new THREE.MeshStandardMaterial({ map: mottled(12, [222, 212, 196], 0.14), bumpMap: plasterBump, bumpScale: 0.8, roughness: 1, vertexColors: true }),
     terraceStone: std({ map: terMap, bumpMap: terBump, bumpScale: 1.5, roughness: 0.95 }, 4),
     megalith: std({ map: megMap, bumpMap: megBump, bumpScale: 2.5, roughness: 0.95 }, 10),
     void: std({ color: 0x120d0a, roughness: 1 }, 2),
@@ -450,10 +518,16 @@ export function makeMaterials() {
     figure: new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.95, vertexColors: true }),
     skin: new THREE.MeshStandardMaterial({ color: 0x8a5d40, roughness: 0.8 }),
     animal: new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 1, vertexColors: true }),
-    olive: new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.9, flatShading: true }),
-    trunk: new THREE.MeshStandardMaterial({ color: 0x5a4a38, roughness: 1 }),
-    ghost: new THREE.MeshBasicMaterial({ color: 0x5b8fe6, transparent: true, opacity: 0.16, depthWrite: false, side: THREE.DoubleSide }),
-    ghostLine: new THREE.LineBasicMaterial({ color: 0x8fb8ff, transparent: true, opacity: 0.75 }),
+    olive: new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.9, flatShading: true, vertexColors: true }),
+    trunk: new THREE.MeshStandardMaterial({ color: 0x5a4a38, roughness: 1, vertexColors: true }),
+    // 573 BC: burned stone, fallen rubble, charred beams.
+    ashlarBurnt: std({ map: burntMap, bumpMap: burntBump, bumpScale: 1.6, roughness: 0.95 }, 6),
+    debris: std({ map: debMap, bumpMap: debBump, bumpScale: 2.4, roughness: 1 }, 1),
+    charcoal: std({ color: 0x1d1814, roughness: 1 }, 2),
+    // Bare limestone and the low thorny scrub of the Judean hills.
+    rock: new THREE.MeshStandardMaterial({ map: mottled(51, [208, 202, 188], 0.2), bumpMap: earthBump, bumpScale: 2, roughness: 0.95, vertexColors: true }),
+    shrub: new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 1, flatShading: true, vertexColors: true }),
+    deadSea: new THREE.MeshStandardMaterial({ color: 0x3e8a9c, roughness: 0.12, metalness: 0.1, normalMap: water, normalScale: new THREE.Vector2(0.3, 0.3) }),
   };
   // Sky light from the environment map greys out matte surfaces; keep it for metals.
   for (const mat of Object.values(m)) {
@@ -461,6 +535,8 @@ export function makeMaterials() {
   }
   m.terrain.map.repeat.set(1, 1);
   m.house.map.repeat.set(1, 1);
+  m.deadSea.envMapIntensity = 0.9;
+  m.fire.color.setRGB(1.0, 0.85, 0.7);    // overlapping flames pass the bloom threshold
   m.veil.userData.tile = 1;
   m.water.userData.tile = 12;
   m.fire.userData.tile = 1;
