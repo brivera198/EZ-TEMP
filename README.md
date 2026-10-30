@@ -17,8 +17,10 @@ An interactive 3D model of Jerusalem and its temple in three periods, with the t
 - **Overlay Ezekiel's vision**: *Off* shows the period as it stood. *Glowing* lays Ezekiel's temple over it as light, coloured by part (gold house, orange altar, teal gates, violet chambers, rose western building, blue walls), with a strength slider; parts hidden behind solid buildings show through faintly. *Solid* shows Ezekiel's temple as if built, in place of Solomon's (c. 600 BC and 573 BC). The *Ezekiel vs Solomon* tab has a side-by-side table.
 - **Explore the city**: four-room houses on terraces, crenellated walls and named gates, the Stepped Stone Structure, the Gihon Spring towers, pools, gardens, tombs, terraced farmland, threshing floors, people and flocks. Click anything, or a label, for its sources.
 - **Look to the horizon**: limestone outcrops and thorny scrub on the hills, the Judean desert falling to the Dead Sea, and the hills of Moab beyond it.
+- **Water and reflections**: pools, channels and the bronze Sea ripple and reflect the sky. The pool nearest you mirrors its surroundings. Bronze reflects the courts around it and gold reflects the light of the room it is in.
 - **Layers**: the river of Ezek 47 with its 1,000-cubit measuring points, the 50-cubit open land of 45:2, the "500 reeds" reading of 42:16–20 at full scale, and the city of Ezek 48 at full scale.
-- **Time of day**: move the sun from dawn over the Mount of Olives to sunset.
+- **Watch a day go by**: the clock runs by itself. Pause it, drag the hour, or speed it up. The sun crosses the sky and the clouds drift over, their shadows moving across the hills. After dusk the full moon and stars come out, lamps glow in doorways, and fires burn in courtyards, at the gates and on the altar.
+- **Meet the people**: men in tunics and mantles, women in shawls with water jars on their heads, children, priests in linen and soldiers with spears go about their day. They walk the lanes, trade and talk at the gates, grind and bake at their doors, plough and thresh, travel with donkeys, and pray with raised hands in the courts. More are out by day than at night. Walk among them at ground level to see their faces and clothes.
 
 Links: `#950`, `#600` and `#573` open a period; add `-glow` or `-solid` for the vision, for example `#600-glow` or `#573-solid`. Older links (`#ezekiel`, `#solomon-600`, `#overlay`) still work.
 
@@ -33,7 +35,7 @@ python3 -m http.server 8000
 
 Opening `index.html` straight from disk will not work, because browsers block ES modules on `file://`. Three.js 0.160.0 and the fonts load from public CDNs.
 
-Graphics settings are automatic: phones and machines with four or fewer cores get lighter geometry and no screen effects; others get ambient occlusion, bloom and filmic tone mapping, which are dropped if the frame rate suffers. To override, add `?quality=low` or `?quality=high`, and `fx=on` or `fx=off` (for example `?quality=high&fx=on`).
+Graphics settings are automatic. Phones and machines with four or fewer cores get lighter geometry, fewer people, flat clouds and no screen effects. Other machines get volumetric clouds, mirror reflections, ambient occlusion, bloom and filmic tone mapping; the costliest of these are dropped if the frame rate suffers. To override, add `?quality=low` or `?quality=high`, and `fx=on` or `fx=off` (for example `?quality=high&fx=on`). Add `clock=stop` to start with the clock paused.
 
 ## The measurements
 
@@ -61,9 +63,13 @@ Key choices:
 | `src/terrain.js` | Jerusalem terrain, the horizon to the Dead Sea and Moab, platforms per period, terrace shader, painted fields and roads |
 | `src/city.js` | Houses, walls and gates, landmarks, trees, vineyards, farm buildings, ruins |
 | `src/nature.js` | Limestone outcrops and scrub on the hills; weeds in the ruined courts |
-| `src/life.js` | People, flocks, jackals, smoke, the man with the measuring reed |
+| `src/life.js` | Who is where doing what: townspeople, worshippers, priests, farmers, travellers, flocks, jackals, smoke |
+| `src/people.js` | Figures with clothing and faces, animated on the GPU; paths and crowds |
 | `src/vision.js` | The glowing, colour-coded overlay of Ezekiel's vision |
-| `src/atmosphere.js` | Haze that thickens in the valleys and glows toward the sun |
+| `src/atmosphere.js` | Haze that thickens in the valleys and glows toward the sun; cloud shadows |
+| `src/sky.js` | Sun and moon, stars, volumetric clouds |
+| `src/water.js` | Rippling water with Fresnel reflection and mirror reflections |
+| `src/lights.js` | Fire and lamp light: a pool of lights that follows the camera |
 | `src/materials.js` | Procedural stone, cedar, gold and carved-panel textures |
 | `src/builder.js` | Geometry merging and clickable zones |
 | `src/main.js` | Scene, lighting, screen effects, views, walking, picking, UI |

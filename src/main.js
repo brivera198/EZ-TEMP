@@ -8,15 +8,20 @@ import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js'
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
 import { INFO, COMPARE, LANDMARKS, CUBIT, BASE_Y, LEVEL, PERIODS } from './data.js';
-import { makeMaterials } from './materials.js';
+import { makeMaterials, nightLights } from './materials.js';
 import { buildTerrain, terrainY, applySite, installTerrainShader, paintOverlay, PODIUM } from './terrain.js';
 import { buildCity, planCountryside } from './city.js';
-import { buildLife } from './life.js';
+import { buildLife, focus as crowdFocus } from './life.js';
 import { buildNature, overgrowth } from './nature.js';
 import { buildEzekiel, buildRiver, buildReedsOutline, buildMigrash, buildCityOfEzekiel, toWorld as E } from './ezekiel.js';
 import { buildSolomon, buildPlatforms } from './solomon.js';
 import { makeVisionLooks, VISION_PARTS } from './vision.js';
 import { atmo, patchScene, clouds, buildClouds } from './atmosphere.js';
+import { celestial, VolumetricClouds, weatherTexture, buildStars, buildMoon } from './sky.js';
+import { Reflections, waterShared } from './water.js';
+import { LightPool } from './lights.js';
+import { shared as figureShared } from './people.js';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 
 const $ = (s) => document.querySelector(s);
 const V = (x, y, z) => new THREE.Vector3(x, y, z);
@@ -39,6 +44,7 @@ const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPrefere
 renderer.setPixelRatio(Math.min(devicePixelRatio, coarse ? 1.5 : 2));
 renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.shadowMap.autoUpdate = false;   // once per frame (frame()), not for every extra render
 renderer.toneMapping = params.get('tone') === 'agx' ? THREE.AgXToneMapping : THREE.ACESFilmicToneMapping;
 renderer.outputColorSpace = THREE.SRGBColorSpace;
 
@@ -54,6 +60,7 @@ controls.maxPolarAngle = Math.PI * 0.497;
 controls.minDistance = 1;
 controls.maxDistance = 12000;
 controls.target.set(40, 130, 90);
+camera.layers.enable(1);                 // the cloud layer (mirror cameras leave it out)
 
 // --- Sky, sun, environment ---------------------------------------------------------
 const sky = new Sky();
@@ -93,30 +100,65 @@ scene.add(hemi);
 scene.fog = new THREE.FogExp2(0xcfd6dc, 6e-5);
 
 const sunDir = new THREE.Vector3();
+const lightDir = new THREE.Vector3(0, 1, 0);      // the sun by day, the full moon by night
+const moonDir = new THREE.Vector3();
+const sky24 = { hours: 9, day: 1, night: 0 };
 const EXPOSURE = renderer.toneMapping === THREE.AgXToneMapping ? 0.9 : 0.58;
+const sm = THREE.MathUtils.smoothstep;
+const _c = new THREE.Color();
+let envHours = -99;
 function setTime(hours) {
-  const t = (hours - 6) / 12;
-  const el = Math.max(-0.03, Math.sin(t * Math.PI) * THREE.MathUtils.degToRad(64));
-  const az = THREE.MathUtils.degToRad(90 + t * 180);  // east → south → west
-  sunDir.set(Math.sin(az) * Math.cos(el), Math.sin(el), -Math.cos(az) * Math.cos(el)).normalize();
+  const c = celestial(hours);
+  sunDir.copy(c.sun);
+  moonDir.copy(c.moon);
+  const { day, night } = c;
+  Object.assign(sky24, { hours, day, night });
   for (const s of [sky, envSky]) s.material.uniforms.sunPosition.value.copy(sunDir);
-  const day = THREE.MathUtils.smoothstep(el, -0.02, 0.35);
-  sun.intensity = 3.2 * THREE.MathUtils.smoothstep(el, -0.02, 0.12);
-  sun.color.setHSL(0.09, 0.75, 0.62 + 0.3 * day);
-  hemi.intensity = 0.22 + 0.35 * day;
-  renderer.toneMappingExposure = EXPOSURE * (1 + 0.25 * (1 - day));
-  // Haze: warm and thicker at dawn and dusk, glowing toward the sun.
-  // Bluish by day (aerial perspective), warm at dawn and dusk.
-  scene.fog.color.setHSL(THREE.MathUtils.lerp(0.08, 0.58, day), 0.3 - 0.1 * day, 0.42 + 0.22 * day);
-  scene.fog.density = 2.3e-5 + 3.5e-5 * (1 - day);
-  atmo.fogSunDir.value.copy(sunDir);
-  atmo.fogSunColor.value.setHSL(0.085, 0.7 - 0.3 * day, 0.55 + 0.25 * day);
-  clouds.cloudLight.value = 0.3 + 0.7 * day;
-  if (envRT) envRT.dispose();
-  envRT = pmrem.fromScene(envScene, 0.04);
-  scene.environment = envRT.texture;
-  const h = Math.floor(hours), m = Math.round((hours - h) * 60);
-  $('#time-out').textContent = `${String(h).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`;
+  // Sunlight by day; after dusk the same light becomes the moon's.
+  if (sunDir.y > -0.05) {
+    lightDir.copy(sunDir);
+    sun.intensity = 3.2 * sm(sunDir.y, -0.02, 0.12);
+    sun.color.setHSL(0.09, 0.75, 0.62 + 0.3 * day);
+  } else {
+    lightDir.copy(moonDir);
+    sun.intensity = 0.34 * sm(moonDir.y, 0.0, 0.25) * night;
+    sun.color.setRGB(0.6, 0.7, 1.0);
+  }
+  // Twilight: the sky still lights the land for a while after sunset.
+  const dusk = sm(sunDir.y, -0.22, 0.0) * (1 - sm(sunDir.y, 0.0, 0.2));
+  hemi.intensity = 0.1 + 0.47 * day + 0.35 * dusk;
+  hemi.color.setRGB(0.2, 0.26, 0.42).lerp(_c.setRGB(0.77, 0.84, 0.93), day);
+  hemi.groundColor.setRGB(0.05, 0.05, 0.07).lerp(_c.setRGB(0.55, 0.42, 0.29), day);
+  // At night the eye adapts: open the exposure and let the haze go blue-black.
+  const boost = 1 + 0.25 * (1 - day) + 0.5 * dusk + 1.3 * night;
+  renderer.toneMappingExposure = EXPOSURE * boost;
+  // The vision is light of its own: keep it from swelling as the exposure opens.
+  if (W.vis) W.vis.setGain(W.vis.baseGain / boost);
+  scene.fog.color.setHSL(THREE.MathUtils.lerp(0.08, 0.58, day), 0.3 - 0.1 * day, 0.42 + 0.22 * day).lerp(_c.setRGB(0.025, 0.035, 0.065), night);
+  scene.fog.density = 2.3e-5 + 3.5e-5 * (1 - day) * (1 - night) + 1.2e-5 * night;
+  atmo.fogSunDir.value.copy(lightDir);
+  atmo.fogSunColor.value.setHSL(0.085, 0.7 - 0.3 * day, 0.55 + 0.25 * day).lerp(_c.setRGB(0.08, 0.1, 0.16), night);
+  clouds.cloudLight.value = 0.08 + 0.92 * day;
+  nightLights.houseGlow.value = 1.1 * sm(1 - day, 0.55, 0.95);
+  if (W.vclouds) {
+    const u = W.vclouds.u;
+    u.lightDir.value.copy(lightDir);
+    if (sunDir.y > -0.05) u.lightCol.value.copy(sun.color).multiplyScalar(4.2 * sm(sunDir.y, -0.03, 0.1));
+    else u.lightCol.value.setRGB(0.07, 0.085, 0.13).multiplyScalar(night);
+    u.ambTop.value.setRGB(0.42, 0.55, 0.78).multiplyScalar(0.015 + 0.985 * day);
+    u.ambLow.value.setRGB(0.36, 0.32, 0.28).multiplyScalar(0.01 + 0.99 * day);
+    u.hazeCol.value.copy(scene.fog.color);
+  }
+  // Re-light the environment only when the sky has visibly changed.
+  if (Math.abs(hours - envHours) > 0.12) {
+    envHours = hours;
+    if (envRT) envRT.dispose();
+    envRT = pmrem.fromScene(envScene, 0.04);
+    scene.environment = envRT.texture;
+    if (W.crowdsLevel) W.crowdsLevel(hours);
+  }
+  const h = Math.floor(hours) % 24, m = Math.floor((hours - Math.floor(hours)) * 60);
+  $('#time-out').textContent = `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
 }
 
 // Shadow frustum follows what you are looking at.
@@ -128,7 +170,7 @@ function updateShadowFrustum(focus, dist) {
     sc.updateProjectionMatrix();
   }
   sun.target.position.copy(focus);
-  sun.position.copy(focus).addScaledVector(sunDir, 1800);
+  sun.position.copy(focus).addScaledVector(lightDir, 1800);
 }
 
 // --- Screen effects: ambient occlusion, bloom, filmic tone mapping -------------------
@@ -182,8 +224,12 @@ function govern(dt) {
   governor.samples.push(dt);
   if (governor.samples.length < 90) return;
   const med = governor.samples.sort((a, b) => a - b)[45];
-  if (med > 1 / 28) gtao.enabled = false;
-  if (med > 1 / 16) { composer = null; W.vis.setGain(1); }
+  if (med > 1 / 28) {
+    gtao.enabled = false;
+    W.refl.enabled = false;
+    if (W.vclouds) { W.vclouds.scale = 0.34; resize(); }
+  }
+  if (med > 1 / 16) { composer = null; W.vis.baseGain = 1; setTime(sky24.hours); }
   governor.done = true;
 }
 
@@ -249,10 +295,45 @@ async function build() {
   scene.add(W.weeds);
   await step('Filling the courts and streets…', 86);
   W.life = buildLife(W.mats, {
-    plan: W.plan, walk: W.city.walk, gates: W.city.gates, smoke: W.city.smoke,
+    quality: QUALITY, plan: W.plan, walk: W.city.walk, gates: W.city.gates, smoke: W.city.smoke,
+    grids: W.city.grids, houses: W.city.houses, night: W.city.night,
     ezAltar: W.ez.altarTop, ezHearths: W.ez.hearths, soAltar: W.so.early.altarTop, soAltarLate: W.so.late.altarTop,
   });
   for (const g of Object.values(W.life.groups)) scene.add(g);
+  // How many people are out at each hour.
+  const out = (h, a0, a1, b0, b1) => sm(h, a0, a1) * (1 - sm(h, b0, b1));
+  const LEVELS = {
+    townLate: (h) => 0.1 + 0.9 * out(h, 5, 7.5, 19, 21.5), townEarly: (h) => 0.1 + 0.9 * out(h, 5, 7.5, 19, 21.5),
+    ezFolk: (h) => 0.05 + 0.95 * out(h, 5.5, 7.5, 18, 20), soCourtLate: (h) => 0.04 + 0.96 * out(h, 5.5, 7.5, 18, 20),
+    soCourtEarly: (h) => 0.04 + 0.96 * out(h, 5.5, 7.5, 18, 20), soFolkEarly: (h) => 0.3 + 0.7 * out(h, 5, 7, 19, 21),
+    soFolkLate: (h) => 0.3 + 0.7 * out(h, 5, 7, 19, 21), soPalace: (h) => 0.25 + 0.75 * out(h, 6, 8, 19, 22),
+    countryEarly: (h) => out(h, 5.5, 7, 17.5, 19.5), countryLate: (h) => out(h, 5.5, 7, 17.5, 19.5), countryRuin: (h) => out(h, 6, 7.5, 17, 19),
+  };
+  W.crowdsLevel = (h) => { for (const [k, f] of Object.entries(LEVELS)) W.life.crowds[k]?.setLevel(f(h % 24)); };
+
+  // Night: fires in courtyards and torches at the gates, and the light they cast.
+  W.lights = new LightPool(scene, QUALITY === 'low' ? 4 : 8);
+  const flames = (fires, torches) => {
+    const g = new THREE.Group();
+    for (const [list, size] of [[fires, 0.5], [torches, 0.32]]) for (const p of list) {
+      const m = new THREE.Sprite(W.mats.fire);
+      m.center.set(0.5, 0.03);
+      m.position.copy(p);
+      m.userData.base = size * (0.8 + Math.random() * 0.4);
+      m.userData.phase = Math.random() * 10;
+      g.add(m);
+      fireMeshes.push(m);
+    }
+    return g;
+  };
+  W.flames = { late: flames(W.city.night.late.fires, W.city.night.late.torches), early: flames(W.city.night.early.fires, W.city.night.early.torches) };
+  scene.add(W.flames.late, W.flames.early);
+  for (const v of PERIOD_KEYS) for (const l of W.so[v].lights) W.lights.add({ ...l, shown: () => W.so[v].templeGroup.visible });
+  for (const l of W.ez.lights) W.lights.add({ ...l, shown: () => W.ez.group.visible });
+  for (const v of ['late', 'early']) {
+    for (const p of W.city.night[v].fires) W.lights.add({ pos: p.clone().setY(p.y + 0.7), power: 5, range: 14, nightOnly: true, shown: () => W.flames[v].visible });
+    for (const p of W.city.night[v].torches) W.lights.add({ pos: p, power: 12, range: 20, nightOnly: true, shown: () => W.flames[v].visible });
+  }
 
   // Everything you can stand on when walking.
   const standOn = [W.plat.square.group, W.plat.sp.group, W.plat.shared.group, W.ez.group];
@@ -280,8 +361,36 @@ async function build() {
   for (const l of W.city.labels) addLabel(l.label, l.pos, 'city', { far: 2400, small: true, periods: l.periods, info: l.info });
   addLabel(W.life.label.label, W.life.label.pos, 'man', { far: 220, small: true, info: 'city-man' });
 
-  W.clouds = buildClouds();
-  scene.add(W.clouds);
+  await step('Gathering the clouds…', 92);
+  clouds.cloudMap.value = weatherTexture();
+  if (QUALITY === 'low') {
+    W.clouds = buildClouds();
+    scene.add(W.clouds);
+  } else {
+    W.vclouds = new VolumetricClouds(renderer, clouds.cloudMap.value);
+    scene.add(W.vclouds.composite);
+  }
+  W.stars = buildStars();
+  W.moon = buildMoon();
+  scene.add(W.stars, W.moon);
+
+  // Reflections: water mirrors its surroundings; gold reflects a lit room;
+  // bronze in the courts reflects the courts (a probe, refreshed as needed).
+  W.refl = new Reflections(renderer, scene);
+  W.refl.enabled = QUALITY !== 'low';
+  scene.updateMatrixWorld(true);
+  W.refl.collect(scene);
+  const room = pmrem.fromScene(new RoomEnvironment(renderer), 0.04);
+  for (const k of ['gold', 'goldCarved', 'goldFloor']) { W.mats[k].envMap = room.texture; W.mats[k].envMapIntensity = 0.55; }
+  W.probe = { rt: new THREE.WebGLCubeRenderTarget(128, { type: THREE.HalfFloatType }), last: -1e9, hours: -99, env: null };
+  W.probe.cam = new THREE.CubeCamera(1, 2500, W.probe.rt);
+  W.probe.cam.position.copy(S(70, I + 9, 26));
+  // The probe sees only the big shapes (layer 2): sky, ground, platforms,
+  // temples, palace, city walls. People, trees and houses add little and cost a lot.
+  const big = [sky, W.terrain.group, W.plat.square.group, W.plat.sp.group, W.plat.shared.group, W.ez.group, W.city.groups.late, W.city.groups.early, W.city.groups.ruin];
+  for (const v of PERIOD_KEYS) big.push(W.so[v].templeGroup, W.so[v].siteGroup, W.so[v].courtGroup);
+  for (const g of big) g.traverse((o) => { if (!o.isInstancedMesh) o.layers.enable(2); });
+  W.probe.cam.children.forEach((c) => c.layers.set(2));
   await step('Lighting the lamps…', 96);
   patchScene(scene);
   setTime(parseFloat($('#time').value));
@@ -384,7 +493,7 @@ function applyVisibility() {
   W.ez.group.visible = solid;
   W.vision.group.visible = glow;
   W.river.group.visible = ez && layers.river;
-  W.river.mesh.material = glow ? W.vis.looks.river.face : W.mats.water;
+  W.river.mesh.material = glow ? W.vis.looks.river.face : W.mats.waterFlow;
   W.migrash.visible = ez && layers.migrash;
   W.reeds.mesh.visible = ez && layers.reeds;
   W.ezCity.group.visible = ez && layers.ezcity;
@@ -419,6 +528,8 @@ function applyVisibility() {
   L.countryLate.visible = life && late;
   L.flocks.visible = life;
   L.ruinLife.visible = life && ruin && !solid;
+  L.countryRuin.visible = life && ruin;
+  W.probe.last = -1e9;      // the courts changed: refresh the bronze reflections
   L.smokeEz.visible = solid && late;
   L.smokeEzKitchens.visible = solid && late;
   L.smokeSo.visible = !solid && early;
@@ -874,12 +985,26 @@ for (const k of Object.keys(state.layers)) {
   const el = $('#lyr-' + k);
   el.addEventListener('change', () => { state.layers[k] = el.checked; applyVisibility(); });
 }
+// The day runs by itself; the slider sets the hour, the buttons the pace.
+const clockState = { running: true, speed: 60, shown: 0 };
 let timeQueued = false;
 $('#time').addEventListener('input', () => {
   if (timeQueued) return;
   timeQueued = true;
   requestAnimationFrame(() => { timeQueued = false; setTime(parseFloat($('#time').value)); });
 });
+function setRunning(on) {
+  clockState.running = on;
+  $('#play').setAttribute('aria-pressed', String(on));
+  $('#play').textContent = on ? '❚❚' : '▶';
+  $('#play').setAttribute('aria-label', on ? 'Pause the day' : 'Run the day');
+}
+$('#play').addEventListener('click', () => setRunning(!clockState.running));
+document.querySelectorAll('.speed button').forEach((b) => b.addEventListener('click', () => {
+  clockState.speed = +b.dataset.speed;
+  document.querySelectorAll('.speed button').forEach((x) => x.setAttribute('aria-pressed', String(x === b)));
+  setRunning(true);
+}));
 const tabs = [['#tab-info', '#pane-info'], ['#tab-cmp', '#pane-cmp']];
 for (const [t, p] of tabs) {
   $(t).addEventListener('click', () => {
@@ -923,8 +1048,35 @@ function resize() {
   renderer.setSize(w, h, false);
   composer?.setPixelRatio(renderer.getPixelRatio());
   composer?.setSize(w, h);
+  const pr = renderer.getPixelRatio();
+  W.vclouds?.setSize(w * pr, h * pr);
+  W.refl?.setSize(w * pr, h * pr);
   camera.aspect = w / h;
   camera.updateProjectionMatrix();
+}
+
+// Bronze in the courts reflects the courts around it: a cube map from the
+// middle of the court, refreshed when the scene or the light has changed.
+function updateProbe(now) {
+  const P = W.probe;
+  if (now - P.last < 8000 && Math.abs(sky24.hours - P.hours) < 0.5) return;
+  if (camera.position.distanceTo(P.cam.position) > 900 && P.env) return;
+  P.last = now;
+  P.hours = sky24.hours;
+  const hide = [W.vision.group, W.vclouds?.composite, W.clouds].filter(Boolean);
+  const was = hide.map((o) => o.visible);
+  hide.forEach((o) => { o.visible = false; });
+  renderer.shadowMap.needsUpdate = true;
+  P.cam.update(renderer, scene);
+  hide.forEach((o, i) => { o.visible = was[i]; });
+  // three.js pre-filters a live cube render target itself when flagged.
+  P.rt.texture.needsPMREMUpdate = true;
+  if (W.mats.bronze.envMap !== P.rt.texture) {
+    W.mats.bronze.envMap = P.rt.texture;
+    W.mats.bronze.envMapIntensity = 1;
+    W.mats.bronze.needsUpdate = true;
+  }
+  P.env = true;
 }
 new ResizeObserver(resize).observe(canvas);
 
@@ -967,21 +1119,39 @@ function frame() {
     if (camera.position.y < gy) camera.position.y = gy;
   }
   updateNear();
+  // The clock: an hour of the day per minute (or faster), round the clock.
+  if (clockState.running) {
+    const hours = (sky24.hours + dt * clockState.speed / 3600) % 24;
+    setTime(hours);
+    if (now - clockState.shown > 250) { $('#time').value = hours.toFixed(2); clockState.shown = now; }
+  }
   const focus = state.walking ? camera.position : controls.target;
   updateShadowFrustum(focus, state.walking ? 120 : camera.position.distanceTo(controls.target));
-  W.mats.water.normalMap.offset.set(time * 0.01, -time * 0.06);
+  waterShared.wTime.value = time;
+  figureShared.pTime.value = time;
   W.vis.shared.time.value = time;
   clouds.cloudTime.value = time;
-  W.clouds.userData.follow(camera);
+  W.clouds?.userData.follow(camera);
+  W.stars.userData.follow(camera, sky24.hours, sky24.night);
+  W.moon.userData.follow(camera, moonDir, sky24.night);
+  const lit = sky24.night > 0.04;
+  W.flames.late.visible = lit && W.city.groups.late.visible;
+  W.flames.early.visible = lit && W.city.groups.early.visible;
   for (const m of fireMeshes) {
     if (!m.parent?.visible) continue;
     const s = m.userData.base * (0.8 + 0.25 * Math.sin(time * 9 + m.userData.phase) + 0.1 * Math.sin(time * 23 + m.userData.phase * 3));
     m.scale.set(m.userData.base * 0.9, s * 2, 1);
   }
-  const flick = 0.85 + 0.15 * Math.sin(time * 11) * Math.sin(time * 7.3);
-  W.ez.altarLight.intensity = 90 * flick;
-  for (const v of PERIOD_KEYS) if (W.so[v].altarLight) W.so[v].altarLight.intensity = 90 * flick;
-  for (const g of Object.values(W.life.groups)) if (g.visible && g.userData.update) g.userData.update(time);
+  W.lights.update(camera, time, sky24.night);
+  crowdFocus.copy(focus);
+  for (const g of Object.values(W.life.groups)) if (g.visible && g.userData.update) g.userData.update(time, dt);
+  // Extra renders before the main one: the mirror for the nearest pool, the
+  // cloud layer, and now and then the reflection probe.
+  camera.updateMatrixWorld();
+  W.refl.update(camera, isShown);
+  W.vclouds?.render(camera);
+  if (QUALITY !== 'low') updateProbe(now);
+  renderer.shadowMap.needsUpdate = true;
   if (composer) composer.render(dt);
   else renderer.render(scene, camera);
   updateLabels();
@@ -991,14 +1161,17 @@ function frame() {
 // --- Start --------------------------------------------------------------------------------
 build().then(() => {
   setupEffects();
-  W.vis.setGain(composer ? 2.2 : 1);   // brighter where bloom can spread it
+  W.vis.baseGain = composer ? 2.2 : 1;   // brighter where bloom can spread it
+  setTime(sky24.hours);
   resize();
   renderCompare();
   renderLegend();
   const h = fromHash() || { period: 'late', vision: 'glow' };
   setScene({ ...h, fromHash: !!fromHash() });
+  W.crowdsLevel(sky24.hours);
+  setRunning(params.get('clock') !== 'stop');
   $('#loading').classList.add('done');
-  window.ezt = { scene, camera, controls, renderer, W, state, setScene, setTime, flyTo, select, viewSections, get composer() { return composer; }, get gtao() { return gtao; }, get bloom() { return bloom; } };
+  window.ezt = { scene, camera, controls, renderer, W, state, setScene, setTime, flyTo, select, viewSections, setRunning, clockState, sky24, terrainY, get composer() { return composer; }, get gtao() { return gtao; }, get bloom() { return bloom; } };
   frame();
 }).catch((err) => {
   console.error(err);

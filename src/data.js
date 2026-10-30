@@ -395,14 +395,20 @@ export const INFO = {
     note: 'Excavators in the City of David found houses destroyed in this fire. The "House of the Bullae" held 51 clay seal impressions, one naming Gemariah son of Shaphan (Jer 36:10).'
   },
   'city-people': {
-    mode: 'both', title: 'People of Jerusalem', he: '',
-    dims: ['Tunic (kuttonet) of wool or linen under a mantle (simlah)', 'Priests in linen, with linen turbans (Ezek 44:17–18)', 'Population c. 600 BC: estimates range from about 8,000 to 25,000'],
-    refs: 'Gen 37:3; Exod 22:26–27; Ezek 44:17–19',
-    note: 'The figures give scale and show how the courts and streets were used. Most clothing was undyed wool; madder red and indigo blue were costly.'
+    mode: 'both', title: 'People of Jerusalem', he: 'עַם',
+    dims: ['Men: tunic (kuttonet) and mantle (simlah), head-cloth or band, short beard (as in the Lachish reliefs)', 'Women: long dress and a shawl over head and shoulders; water carried in jars on the head', 'Priests in linen with linen turbans (Ezek 44:17–18); soldiers with pointed helmets, spears and round shields', 'Population c. 600 BC: estimates range from about 8,000 to 25,000'],
+    refs: 'Gen 24:15; 37:3; Exod 22:26–27; 1 Kgs 8:22; Ezek 44:17–19; 46:9',
+    note: 'They walk the lanes, trade and talk at the gates, grind and bake at their doors, plough, thresh and travel, and pray with raised hands in the courts. More are about by day than at night. Most clothing was undyed wool; madder red and indigo blue were costly.'
+  },
+  'city-market': {
+    mode: 'both', title: 'Trading in the gate squares', he: 'רְחוֹב',
+    dims: ['Awnings, jars of oil and wine, baskets of grain', 'In the squares inside the city gates'],
+    refs: '2 Kgs 7:1, 18; Neh 13:15–16; Zeph 1:10–11',
+    note: 'Measures of flour and barley were sold "in the gate of Samaria" (2 Kgs 7:1); Zephaniah mentions the Fish Gate and the Maktesh, where the traders were.'
   },
   'city-flock': {
     mode: 'both', title: 'Sheep and goats', he: 'צֹאן',
-    dims: ['Mixed flocks of fat-tailed sheep and black goats', 'Folded at night in stone pens'],
+    dims: ['Mixed flocks of fat-tailed sheep and black goats, grazing as they move', 'Folded at night in stone pens', 'Oxen plough and tread out the grain; donkeys carry loads on the roads'],
     refs: 'Lev 3:9; Song 4:1; 1 Sam 17:34–35; Ezek 34',
     note: 'Ezekiel 34 uses the shepherd and his flock as a picture of Israel\'s rulers.'
   },

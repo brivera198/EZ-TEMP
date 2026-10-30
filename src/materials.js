@@ -1,6 +1,10 @@
 // Procedural textures and materials. Everything is drawn on canvases at load
 // time, so the model needs no image files.
 import * as THREE from 'three';
+import { makeWater } from './water.js';
+
+// Night: how strongly lamp-lit doorways and windows glow (set by the day cycle).
+export const nightLights = { houseGlow: { value: 0 } };
 
 function rng(seed) {
   let s = seed >>> 0;
@@ -501,10 +505,8 @@ export function makeMaterials() {
     window: std({ map: lattice(), roughness: 0.9 }, 2),
     door: std({ map: cedarMap, bumpMap: cedarBump, bumpScale: 2, roughness: 0.6 }, 10),
     veil: new THREE.MeshStandardMaterial({ map: veilTex(), roughness: 0.95, side: THREE.DoubleSide }),
-    water: new THREE.MeshStandardMaterial({
-      color: 0x2f7f8c, roughness: 0.06, metalness: 0.15, normalMap: water,
-      normalScale: new THREE.Vector2(0.8, 0.8), transparent: true, opacity: 0.9,
-    }),
+    water: makeWater(water, { color: 0x123f47, opacity: 0.9 }),
+    waterFlow: makeWater(water, { flow: true, color: 0x1a4a4d, opacity: 0.86, strength: 0.28 }),
     fire: new THREE.SpriteMaterial({ map: flameTex(), color: 0xffffff, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false }),
     ember: new THREE.MeshStandardMaterial({ color: 0x2a1408, emissive: 0xff5a10, emissiveIntensity: 1.6, roughness: 1 }),
     linen: std({ color: 0xf1ebdc, roughness: 1 }, 4),
@@ -527,7 +529,7 @@ export function makeMaterials() {
     // Bare limestone and the low thorny scrub of the Judean hills.
     rock: new THREE.MeshStandardMaterial({ map: mottled(51, [208, 202, 188], 0.2), bumpMap: earthBump, bumpScale: 2, roughness: 0.95, vertexColors: true }),
     shrub: new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 1, flatShading: true, vertexColors: true }),
-    deadSea: new THREE.MeshStandardMaterial({ color: 0x3e8a9c, roughness: 0.12, metalness: 0.1, normalMap: water, normalScale: new THREE.Vector2(0.3, 0.3) }),
+    deadSea: makeWater(water, { color: 0x1d5866, opacity: 1, scale: 0.04, strength: 0.1 }),
   };
   // Sky light from the environment map greys out matte surfaces; keep it for metals.
   for (const mat of Object.values(m)) {
@@ -535,7 +537,17 @@ export function makeMaterials() {
   }
   m.terrain.map.repeat.set(1, 1);
   m.house.map.repeat.set(1, 1);
-  m.deadSea.envMapIntensity = 0.9;
+  // Lamp light in doorways and windows after dark (city.js marks them).
+  m.house.onBeforeCompile = (shader) => {
+    shader.uniforms.houseGlow = nightLights.houseGlow;
+    shader.vertexShader = shader.vertexShader
+      .replace('#include <common>', '#include <common>\nattribute float aWin;\nattribute float iLit;\nvarying float vGlow;')
+      .replace('#include <begin_vertex>', '#include <begin_vertex>\nvGlow = aWin * iLit;');
+    shader.fragmentShader = shader.fragmentShader
+      .replace('#include <common>', '#include <common>\nuniform float houseGlow;\nvarying float vGlow;')
+      .replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>\ntotalEmissiveRadiance += vec3(1.0, 0.42, 0.12) * vGlow * houseGlow;');
+  };
+  m.house.customProgramCacheKey = () => 'house-glow-v1';
   m.fire.color.setRGB(1.0, 0.85, 0.7);    // overlapping flames pass the bloom threshold
   m.veil.userData.tile = 1;
   m.water.userData.tile = 12;

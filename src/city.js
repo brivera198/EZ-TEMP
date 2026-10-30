@@ -57,18 +57,22 @@ const solid = (obj) => { obj.traverse((o) => { if (o.isMesh) o.userData.solid = 
 
 // Upward-facing strip along a polyline of [x, y, z] points.
 function ribbon(pts, width) {
-  const pos = [], idx = [];
+  const pos = [], uv = [], idx = [];
+  let run = 0;
   for (let i = 0; i < pts.length; i++) {
     const a = pts[Math.max(0, i - 1)], b = pts[Math.min(pts.length - 1, i + 1)];
     let tx = b[0] - a[0], tz = b[2] - a[2];
     const l = Math.hypot(tx, tz) || 1;
     tx /= l; tz /= l;
     const [x, y, z] = pts[i];
+    if (i) run += Math.hypot(x - pts[i - 1][0], z - pts[i - 1][2]);
     pos.push(x - tz * width / 2, y, z + tx * width / 2, x + tz * width / 2, y, z - tx * width / 2);
+    uv.push(0, run / 3, 1, run / 3);           // v runs downstream, for flowing water
     if (i < pts.length - 1) { const k = i * 2; idx.push(k, k + 2, k + 1, k + 1, k + 2, k + 3); }
   }
   const geo = new THREE.BufferGeometry();
   geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  geo.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
   geo.setIndex(idx);
   geo.computeVertexNormals();
   return geo;
@@ -153,6 +157,7 @@ function fourRoomHouse(upper) {
   const oven = new THREE.CylinderGeometry(0.03, 0.045, 0.12, 8).toNonIndexed();   // clay oven (tannur)
   oven.translate(0.09, 0.06, 0.3);
   p.push(paint(oven, OVEN));
+  for (const s of [-1, 1]) p.push(cbox(s * 0.38 - 0.04, s * 0.38 + 0.04, 0.58, 0.7, 0.5, 0.506, DARK));   // window slits
   if (upper) {                                          // upper room on the roof (2 Kgs 4:10)
     p.push(cbox(-0.44, 0.06, 1, 1.62, -0.47, -0.21, WALL));
     p.push(cbox(-0.46, 0.08, 1.62, 1.68, -0.49, -0.19, ROOF));
@@ -178,7 +183,7 @@ function broadRoomHouse() {
 }
 
 function simpleHouse() {
-  const p = [cbox(-0.5, 0.5, 0, 1, -0.5, 0.5, WALL), cbox(-0.47, 0.47, 1, 1.02, -0.47, 0.47, ROOF)];
+  const p = [cbox(-0.5, 0.5, 0, 1, -0.5, 0.5, WALL), cbox(-0.47, 0.47, 1, 1.02, -0.47, 0.47, ROOF), cbox(-0.08, 0.08, 0, 0.62, 0.5, 0.506, DARK)];
   parapets(p, 1, [[-0.5, 0.5, -0.5, -0.47], [-0.5, 0.5, 0.47, 0.5], [-0.5, -0.47, -0.47, 0.47], [0.47, 0.5, -0.47, 0.47]]);
   return mergeParts(p);
 }
@@ -222,6 +227,12 @@ function houseGeos() {
     A: fourRoomHouse(false), B: fourRoomHouse(true), C: broadRoomHouse(), L: simpleHouse(),
     R: [ruinedHouse(r), ruinedHouse(r), ruinedHouse(r)], plinth,
   };
+  // Doorways and windows (the dark parts) glow when a lamp is lit inside.
+  for (const k of ['A', 'B', 'C', 'L']) {
+    const c = HOUSE_GEOS[k].attributes.color, win = new Float32Array(c.count);
+    for (let i = 0; i < c.count; i++) win[i] = Math.abs(c.getX(i) - DARK[0]) < 0.01 && Math.abs(c.getY(i) - DARK[1]) < 0.01 ? 1 : 0;
+    HOUSE_GEOS[k].setAttribute('aWin', new THREE.BufferAttribute(win, 1));
+  }
   return HOUSE_GEOS;
 }
 
@@ -237,7 +248,12 @@ function houseMeshes(recs, mats, { ruin = false, quality = 'high' } = {}) {
     (byKey[key] ||= []).push(r);
   });
   for (const [key, list] of Object.entries(byKey)) {
-    const geo = key[0] === 'R' ? G.R[+key[1]] : G[key];
+    let geo = key[0] === 'R' ? G.R[+key[1]] : G[key];
+    if (!ruin) {
+      // About one house in three keeps a lamp burning after dark.
+      geo = geo.clone();
+      geo.setAttribute('iLit', new THREE.InstancedBufferAttribute(Float32Array.from(list, (r) => (hash1(Math.round(r.x * 7 + r.z * 13)) < 0.33 ? 1 : 0)), 1));
+    }
     const im = instanced(geo, mats.house, list, ruin ? 'city-house-ruin' : 'city-house', (r, p, q, s, c) => {
       p.set(r.x, r.floor, r.z);
       q.setFromAxisAngle(Y_AXIS, r.rot);
@@ -431,7 +447,9 @@ function layoutCity({ poly, site, wall, wallHalf, exclude, streets, plazas, targ
     const x = bb.x0 + ((k % W) + 0.2 + rand() * 0.6) * cell, z = bb.z0 + (Math.floor(k / W) + 0.2 + rand() * 0.6) * cell;
     return [x, z];
   };
-  return { houses, walkable };
+  // The lanes and streets as a grid, for people to walk along (life.js).
+  const grid = { occ, W, D, bb, cell, at: hg.at, free: (x, z) => { const k = cellOf(x, z); return k >= 0 && (occ[k] === 2 || occ[k] === 3); } };
+  return { houses, walkable, grid };
 }
 
 // --- City walls, towers and gates ------------------------------------------------------
@@ -676,7 +694,7 @@ function channel(mats) {
     }
   }
   const lining = new THREE.Mesh(ribbon(dense.map(([x, y, z]) => [x, y - 0.04, z]), 2.2), mats.terraceStone);
-  const water = new THREE.Mesh(ribbon(dense, 1.2), mats.water);
+  const water = new THREE.Mesh(ribbon(dense, 1.2), mats.waterFlow);
   return { lining, water, path: dense };
 }
 
@@ -896,6 +914,45 @@ function vineyards(mats, quality, rand) {
   });
 }
 
+// --- Market stalls --------------------------------------------------------------------
+// Awnings of cloth on poles with goods below, in the squares inside the gates
+// where trading was done (2 Kgs 7:1; Neh 13:15–16).
+function marketStalls(mats, gates, rand) {
+  const awn = [], posts = [], goods = [];
+  for (const g of gates) {
+    const [cx, cz] = g.inner;
+    const ang = g.sg.ang;
+    for (let k = 0; k < 6; k++) {
+      const a = ang + Math.PI / 2 + (k - 2.5) * 0.42, r = 9 + rand() * 3;
+      const x = cx + Math.cos(a) * r, z = cz + Math.sin(a) * r;
+      const y = terrainY(x, z, 'square');
+      const rot = Math.atan2(cx - x, cz - z);
+      awn.push({ x, y: y + 2.1, z, rot, c: [[0.75, 0.66, 0.5], [0.55, 0.22, 0.14], [0.8, 0.76, 0.66], [0.3, 0.32, 0.45]][k % 4] });
+      for (const [dx, dz] of [[-1.2, -0.9], [1.2, -0.9], [-1.2, 0.9], [1.2, 0.9]]) {
+        posts.push({ x: x + dx * Math.cos(rot) + dz * Math.sin(rot), y, z: z - dx * Math.sin(rot) + dz * Math.cos(rot) });
+      }
+      for (let j = 0; j < 4; j++) goods.push({ x: x + (rand() - 0.5) * 1.8, y, z: z + (rand() - 0.5) * 1.2, s: 0.25 + rand() * 0.2, c: rand() });
+    }
+  }
+  const group = new THREE.Group();
+  const cloth = paint(new THREE.BoxGeometry(2.8, 0.06, 2.2).toNonIndexed(), [1, 1, 1]);
+  group.add(instanced(cloth, mats.figure, awn, 'city-market', (a, p, q, s, c) => {
+    p.set(a.x, a.y, a.z); q.setFromAxisAngle(Y_AXIS, a.rot); s.set(1, 1, 1); c.setRGB(...a.c);
+  }));
+  const pole = new THREE.CylinderGeometry(0.04, 0.05, 2.1, 5).toNonIndexed();
+  pole.translate(0, 1.05, 0);
+  group.add(instanced(paint(pole, [0.36, 0.25, 0.15]), mats.figure, posts, 'city-market', (a, p, q, s, c) => {
+    p.set(a.x, a.y, a.z); q.identity(); s.set(1, 1, 1); c.setRGB(1, 1, 1);
+  }));
+  // Jars, baskets of grain and bundles.
+  const jar = new THREE.LatheGeometry([[0.01, 0], [0.5, 0.1], [0.62, 0.55], [0.45, 0.95], [0.22, 1.05], [0.25, 1.2], [0.01, 1.2]].map(([r, y]) => new THREE.Vector2(r, y)), 8).toNonIndexed();
+  group.add(instanced(paint(jar, [1, 1, 1]), mats.figure, goods, 'city-market', (a, p, q, s, c) => {
+    p.set(a.x, a.y, a.z); q.identity(); s.setScalar(a.s);
+    if (a.c < 0.5) c.setRGB(0.62, 0.36, 0.2); else if (a.c < 0.8) c.setRGB(0.78, 0.65, 0.38); else c.setRGB(0.5, 0.42, 0.3);
+  }));
+  return group;
+}
+
 // --- Farm buildings ------------------------------------------------------------------
 function farmBuildings(mats, plan) {
   const group = new THREE.Group();
@@ -1046,6 +1103,29 @@ export function buildCity(mats, plan, { quality = 'high' } = {}) {
   groups.common.children.forEach((c) => { if (c !== trees.far && c !== trees.garden && c.userData.infoId !== 'city-vines') solid(c); });
   groups.later.children.forEach(solid);
   const gates = { late: wallLate.gates.map((g) => g.inner), early: wallEarly.gates.map((g) => g.inner) };
-  return { groups, zones, labels, smoke, walk, gates, houses: { late: lateMain, early: early.houses } };
+  // After dark: fires in a few courtyards, torches either side of each gate.
+  const courtFire = (list) => list.filter((h, i) => h.type !== 'C' && hash1(i * 31 + 7) < 0.12).map((h) => {
+    const lz = 0.16 * h.d;
+    return new THREE.Vector3(h.x + lz * Math.sin(h.rot), h.floor + 0.05, h.z + lz * Math.cos(h.rot));
+  });
+  // Torches on both faces of each gate, either side of the opening.
+  const torches = (gs, site) => gs.flatMap((g) => {
+    const tx = Math.cos(g.sg.ang), tz = Math.sin(g.sg.ang);
+    const half = (g.sg.th || 4.5) / 2 + 0.4;              // just off the wall face
+    return [half, -half].flatMap((out) => [-1, 1].map((s) => {
+      const x = g.x + g.sg.nx * out + tx * s * 4.2, z = g.z + g.sg.nz * out + tz * s * 4.2;
+      return new THREE.Vector3(x, terrainY(x, z, site) + 3.2, z);
+    }));
+  });
+  const night = {
+    late: { fires: courtFire(lateMain), torches: torches(wallLate.gates, 'square') },
+    early: { fires: courtFire(early.houses), torches: torches(wallEarly.gates, 'sp') },
+  };
+  groups.late.add(marketStalls(mats, wallLate.gates.filter((g) => ['gate-fish', 'gate-water', 'gate-ephraim', 'gate-valley'].includes(g.id)), rand));
+  return {
+    groups, zones, labels, smoke, walk, gates, night,
+    grids: { late: late.grid, early: early.grid },
+    houses: { late: lateMain, early: early.houses },
+  };
 }
 

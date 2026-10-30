@@ -564,13 +564,6 @@ export function buildSolomon(mats, { variant = 'early' } = {}) {
     g.position.set(0, BASE_Y, 0);
     g.scale.setScalar(CUBIT);
   }
-  if (!ruin) {
-    const navel = new THREE.PointLight(0xffc27a, 55, 40, 2);
-    navel.position.set(32, H + 18, 0);
-    const hoh = new THREE.PointLight(0xffd690, 60, 22, 2);
-    hoh.position.set(4, H + 14, 0);
-    templeGroup.add(navel, hoh);
-  }
 
   const zones = [...temple.finish(templeGroup), ...site.finish(siteGroup)];
   const courtZones = court.finish(courtGroup);
@@ -597,15 +590,15 @@ export function buildSolomon(mats, { variant = 'early' } = {}) {
     templeGroup.add(m);
     fireMeshes.push(m);
   }
-  let altarLight = null;
-  if (!ruin) {
-    altarLight = new THREE.PointLight(0xff8a3a, 90, 45, 2);
-    altarLight.position.copy(altarTop).sub(templeGroup.position).divideScalar(CUBIT).add(new THREE.Vector3(0, 4, 0));
-    templeGroup.add(altarLight);
-  }
-
+  // Light sources for the light pool (main.js): the altar fire and the lamps
+  // of the nave and inner room.
+  const lights = ruin ? [] : [
+    { pos: altarTop.clone().add(new THREE.Vector3(0, 2, 0)), power: 40, range: 30 },
+    { pos: T(32, H + 18, 0), power: 14, range: 24, lamp: true },
+    { pos: T(4, H + 14, 0), power: 10, range: 14, lamp: true },
+  ];
   return {
-    templeGroup, siteGroup, courtGroup, zones, courtZones, labels, fireMeshes, altarLight,
+    templeGroup, siteGroup, courtGroup, zones, courtZones, labels, fireMeshes, lights,
     altarTop: ruin ? null : altarTop,
   };
 }

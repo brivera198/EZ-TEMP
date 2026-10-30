@@ -357,13 +357,6 @@ export function buildEzekiel(mats, { vision = null } = {}) {
 
   if (vision) return { group, zones: bld.finishVision(group, vision.looks, VISION_SKIP), labels };
 
-  // --- Interior lighting -----------------------------------------------------------
-  const nave = new THREE.PointLight(0xffc27a, 45, 40, 2);
-  nave.position.set(-93, H + 18, 0);
-  const glory = new THREE.PointLight(0xfff1d0, 120, 30, 2);       // "the glory of the LORD filled the house" (43:5)
-  glory.position.set(-125, H + 14, 0);
-  group.add(nave, glory);
-
   const zones = bld.finish(group);
 
   // Fires (altar, kitchens) are separate so they can flicker.
@@ -381,12 +374,16 @@ export function buildEzekiel(mats, { vision = null } = {}) {
       fireMeshes.push(m);
     }
   }
-  const altarLight = new THREE.PointLight(0xff8a3a, 90, 45, 2);
-  altarLight.position.set(0, I + 15, 0);
-  group.add(altarLight);
-
   const hearths = fires.filter((f) => !f.big).map((f) => toWorld(f.u, f.y, f.v));
-  return { group, zones, labels, fireMeshes, altarLight, altarTop: toWorld(0, I + 11, 0), hearths };
+  // Light sources for the light pool (main.js): the altar fire, the kitchen
+  // hearths, a lamp in the nave and the glory filling the house (43:5).
+  const lights = [
+    { pos: toWorld(0, I + 15, 0), power: 40, range: 30 },
+    ...hearths.map((p) => ({ pos: p.clone().add(new THREE.Vector3(0, 0.8, 0)), power: 5, range: 12 })),
+    { pos: toWorld(-93, H + 18, 0), power: 14, range: 24, lamp: true },
+    { pos: toWorld(-125, H + 14, 0), power: 30, range: 18, lamp: true },
+  ];
+  return { group, zones, labels, fireMeshes, lights, altarTop: toWorld(0, I + 11, 0), hearths };
 }
 
 // ---------------------------------------------------------------------------

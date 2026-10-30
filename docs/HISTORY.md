@@ -99,7 +99,32 @@ Ezekiel was a priest (Ezek 1:3) taken to Babylon in 597 BC, so the c. 600 BC tem
 
 ## People and animals
 
-Figures give scale and show how spaces were used: priests in linen in the inner courts (Ezek 44:17–19), the people in the outer courts, Levite singers east of Solomon's altar (2 Chr 5:12), elders at the city gates (Prov 31:23), farmers, travellers with donkeys, and mixed flocks of fat-tailed sheep and black goats (Lev 3:9; Song 4:1). With Ezekiel's temple shown solid, the only figures in it in 573 BC are Ezekiel and the man with the measuring reed (Ezek 40:3). In the ruins of 573 BC there are no people in the temple courts, only jackals (Lam 5:18).
+Figures give scale and show how spaces were used. They move through the day:
+
+| What they do | Where | Sources |
+|---|---|---|
+| Walk the lanes; women carry water jars on their heads or baskets | The city | Gen 24:15; 1 Sam 9:11 |
+| Sit and talk at the gates; trade under awnings in the gate squares | Inside each gate | Prov 31:23; 2 Kgs 7:1; Zeph 1:10–11 |
+| Grind grain and bake at their doors | Beside the houses | Exod 11:5; Jer 7:18 |
+| Keep watch with spear and shield | At the gates, day and night | Neh 7:3; Isa 62:6 |
+| Plough with a pair of oxen, tread out grain with oxen | Fields and threshing floors | Deut 25:4; 1 Kgs 19:19 |
+| Travel with donkeys | The roads | Judg 19:10 |
+| Graze sheep and goats with a shepherd | The hillsides | Lev 3:9; Song 4:1 |
+| Pray with raised hands; walk in by one gate and out by the other | The temple courts | 1 Kgs 8:22; Ps 134:2; Ezek 46:9 |
+| Serve in linen between altar, Sea and stands | The inner courts | Ezek 44:17–19; 2 Chr 4:6 |
+| Measure the gate, with Ezekiel following | Ezekiel's east gate | Ezek 40:3–6 |
+| Work the vineyards, the poorest left behind | The fields in 573 BC | 2 Kgs 25:12; Jer 39:10 |
+
+Clothing follows the Lachish reliefs and the Bible: a tunic (kuttonet) under a mantle (simlah), a head-cloth or band and a short beard for men; long dresses and shawls over head and shoulders for women; linen and turbans for priests; pointed helmets, spears and round shields for soldiers. Most cloth is undyed wool; madder red, indigo and purple are rare. Faces and the number of people are the model's choices, not evidence.
+
+## Day and night
+
+| Feature | Notes and sources |
+|---|---|
+| Lamps in doorways and windows after dark | Prov 31:18; the "light of the lamp" as a sign of a living city, taken away in Jer 25:10 (so none burn in the ruins of 573 BC) |
+| Fires in courtyards, torches at the gates | Household fires (Jer 36:22); torches and watchmen (Judg 7:16; Isa 62:6) |
+| The altar fire kept burning | Lev 6:13 |
+| A full moon at night | Passover and the Feast of Tabernacles fell at full moon (Lev 23:5–6, 34); the model always shows one | With Ezekiel's temple shown solid, the only figures in it in 573 BC are Ezekiel and the man with the measuring reed (Ezek 40:3). In the ruins of 573 BC there are no people in the temple courts, only jackals (Lam 5:18).
 
 ## Terrain
 

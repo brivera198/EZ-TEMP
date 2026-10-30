@@ -120,6 +120,7 @@ export function makeVisionLooks() {
   return {
     shared,
     looks,
+    baseGain: 1,
     setStrength(s) {
       shared.strength.value = s;
       for (const m of lines) m.opacity = m.userData.base * Math.min(1, s * 1.15);

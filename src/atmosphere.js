@@ -62,6 +62,16 @@ THREE.ShaderChunk.fog_fragment = /* glsl */ `
   gl_FragColor.rgb = mix( gl_FragColor.rgb, fogCol, fogFactor );
 #endif`;
 
+// three.js's derivative bump mapping normalises a zero vector where screen
+// derivatives vanish (grazing angles, small cube-map faces), producing NaN
+// pixels that blur and bloom then spread. Fall back to the plain normal there.
+THREE.ShaderChunk.bumpmap_pars_fragment = THREE.ShaderChunk.bumpmap_pars_fragment
+  .replace('vec3 vSigmaX = normalize( dFdx( surf_pos.xyz ) );\n\t\tvec3 vSigmaY = normalize( dFdy( surf_pos.xyz ) );',
+    'vec3 dpx = dFdx( surf_pos.xyz ), dpy = dFdy( surf_pos.xyz );\n\t\tif ( dot( dpx, dpx ) < 1e-24 || dot( dpy, dpy ) < 1e-24 ) return surf_norm;\n\t\tvec3 vSigmaX = normalize( dpx );\n\t\tvec3 vSigmaY = normalize( dpy );')
+  .replace('return normalize( abs( fDet ) * surf_norm - vGrad );',
+    'vec3 bumped = abs( fDet ) * surf_norm - vGrad;\n\t\treturn dot( bumped, bumped ) > 1e-24 ? normalize( bumped ) : surf_norm;');
+if (!THREE.ShaderChunk.bumpmap_pars_fragment.includes('bumped')) console.warn('bump map patch did not apply');
+
 // Give a material the shared haze and cloud uniforms. Built-in materials that
 // are not patched still render, just without the sun glow, height falloff and
 // cloud shadows.
@@ -85,34 +95,26 @@ export function patchScene(root) {
 }
 
 // --- Clouds -------------------------------------------------------------------
-// Scattered fair-weather cumulus about 2 km above the city. The same noise
-// darkens the ground where their shadows fall (see terrain.js).
+// Fair-weather cumulus about 1.5–2.7 km above the city. The weather map that
+// shapes them (sky.js) also darkens the ground where their shadows fall.
 export const clouds = {
   cloudTime: { value: 0 },
-  cloudCover: { value: 0.6 },      // higher means fewer clouds
-  cloudY: { value: 2200 },
+  cloudCover: { value: 0.52 },     // higher means fewer clouds
+  cloudY: { value: 2400 },         // middle of the cloud layer
   cloudLight: { value: 1 },
   cloudOn: { value: 1 },           // cloud shadows on lit materials
+  cloudMap: { value: null },       // weather map shared with the volumetric clouds
 };
 
+// Where the clouds are: the weather map, drifting on the wind (as sky.js).
 export const CLOUD_GLSL = /* glsl */ `
 uniform float cloudTime;
 uniform float cloudCover;
 uniform float cloudY;
-float cHash(vec2 p) { p = fract(p * vec2(123.34, 456.21)); p += dot(p, p + 45.32); return fract(p.x * p.y); }
-float cNoise(vec2 p) {
-  vec2 i = floor(p), f = fract(p);
-  vec2 u = f * f * (3.0 - 2.0 * f);
-  return mix(mix(cHash(i), cHash(i + vec2(1.0, 0.0)), u.x), mix(cHash(i + vec2(0.0, 1.0)), cHash(i + vec2(1.0, 1.0)), u.x), u.y);
-}
-float cFbm(vec2 p) {
-  float s = 0.0, a = 0.5;
-  for (int i = 0; i < 5; i++) { s += a * cNoise(p); p = p * 2.03 + vec2(17.1, 9.3); a *= 0.5; }
-  return s;
-}
+uniform sampler2D cloudMap;
 float cloudAt(vec2 xz) {
-  vec2 p = xz / 2600.0 + vec2(cloudTime * 0.0016, cloudTime * 0.0007);
-  return smoothstep(cloudCover, cloudCover + 0.22, cFbm(p));
+  float w = texture2D(cloudMap, xz / 24000.0 + vec2(cloudTime * 0.00025, cloudTime * 0.0001)).r;
+  return smoothstep(cloudCover + 0.05, cloudCover + 0.3, w);
 }`;
 
 // Cloud shadows: dim the sunlight (the scene's only directional light) where
@@ -154,7 +156,7 @@ export function buildClouds() {
         float c = cloudAt(vW.xz);
         if (c < 0.01) discard;
         // Thinner toward the sun = lit edge; the body is lit from the sky below.
-        float toward = cloudAt(vW.xz + normalize(sunDir.xz + 1e-4) * 260.0);
+        float toward = cloudAt(vW.xz + normalize(sunDir.xz + 1e-4) * 600.0);
         float lit = clamp(0.55 + (c - toward) * 1.6 + 0.25 * sunDir.y, 0.2, 1.0);
         vec3 col = mix(vec3(0.62, 0.66, 0.72), sunColor * 1.15 + 0.25, lit) * cloudLight;
         float d = length(vW.xz - cameraPosition.xz);

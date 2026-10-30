@@ -1,97 +1,29 @@
-// People, animals and smoke. Figures are simple and instanced: they give
-// scale and show how the courts, streets and fields were used.
+// People, animals and smoke for every period: who is where, doing what. The
+// figures move (people.js); main.js sets how many are out at each hour.
 import * as THREE from 'three';
-import { mergeParts, paint, cbox } from './builder.js';
 import { terrainY, rng, insidePolygon, LATE_POLY } from './terrain.js';
 import { CUBIT, LEVEL, BASE_Y, PALACE_PAD, ROADS } from './data.js';
 import { toWorld } from './ezekiel.js';
+import { Crowd, Path, smoothPts, figureKit, ACT, PROP } from './people.js';
+export { focus } from './people.js';
 
 const { outer: O, inner: I, house: H } = LEVEL;
-const Y_AXIS = new THREE.Vector3(0, 1, 0);
 const S = (u, y, v) => new THREE.Vector3(u * CUBIT, BASE_Y + y * CUBIT, v * CUBIT);   // Solomon frame
+const EZ_U = 125;                                                                    // Ezekiel's centre in that frame
 
-// Clothing colours: linen, undyed wools, and the rarer dyed cloth.
-const LINEN = [0.93, 0.91, 0.85];
-const WOOL = [[0.72, 0.64, 0.52], [0.55, 0.45, 0.33], [0.42, 0.32, 0.22], [0.62, 0.60, 0.56], [0.30, 0.25, 0.20], [0.80, 0.74, 0.62]];
-const DYED = [[0.55, 0.16, 0.10], [0.20, 0.26, 0.44], [0.66, 0.50, 0.24]];
+// Clothing: linen, undyed wool in many shades, and the rarer dyed cloth
+// (madder red, indigo, ochre, purple). Written as display colours, converted
+// to the renderer's linear colours.
+const lin = (c) => c.map((v) => Math.pow(v, 2.2));
+const LINEN = lin([0.9, 0.88, 0.82]);
+const WOOL = [[0.8, 0.74, 0.62], [0.66, 0.57, 0.45], [0.52, 0.42, 0.31], [0.72, 0.7, 0.66], [0.4, 0.33, 0.26], [0.86, 0.81, 0.7], [0.6, 0.5, 0.38]].map(lin);
+const DYED = [[0.62, 0.2, 0.14], [0.24, 0.3, 0.52], [0.74, 0.56, 0.26], [0.44, 0.2, 0.38]].map(lin);
+const SKIN = [[0.64, 0.47, 0.35], [0.58, 0.41, 0.29], [0.7, 0.53, 0.4], [0.5, 0.35, 0.24], [0.66, 0.49, 0.36]].map(lin);
+const HAIR = [[0.1, 0.07, 0.05], [0.16, 0.11, 0.07], [0.24, 0.16, 0.1]].map(lin);
+const GREY = lin([0.62, 0.6, 0.57]);
+const BRONZE = lin([0.66, 0.46, 0.24]);
 
-// A standing figure in tunic and mantle, arms at the sides, head-cloth over
-// the back of the head. Faces +z.
-function figureGeo() {
-  const body = new THREE.LatheGeometry([[0.25, 0], [0.23, 0.3], [0.19, 0.82], [0.2, 1.12], [0.235, 1.3], [0.13, 1.42], [0.001, 1.44]].map(([r, y]) => new THREE.Vector2(r, y)), 7);
-  const parts = [paint(body, [1, 1, 1])];
-  for (const s of [-1, 1]) {
-    const arm = new THREE.CylinderGeometry(0.045, 0.055, 0.62, 5);
-    arm.rotateZ(s * 0.12);
-    arm.rotateX(-0.1);
-    arm.translate(s * 0.255, 1.02, 0.04);
-    parts.push(paint(arm, [1, 1, 1]));
-  }
-  const cloth = new THREE.SphereGeometry(0.135, 7, 5);      // head-cloth
-  cloth.scale(1, 1.05, 1.1);
-  cloth.translate(0, 1.56, -0.03);
-  parts.push(paint(cloth, [1, 1, 1]));
-  return mergeParts(parts);
-}
-function headGeo() {
-  const h = new THREE.SphereGeometry(0.105, 7, 5);
-  h.translate(0, 1.53, 0.045);
-  return h;
-}
-function animalGeo() {
-  const body = new THREE.SphereGeometry(0.5, 8, 6);
-  body.scale(1, 0.6, 0.55);
-  body.translate(0, 0.62, 0);
-  const head = new THREE.SphereGeometry(0.17, 6, 4);
-  head.scale(1.3, 1, 0.9);
-  head.translate(0.52, 0.74, 0);
-  const parts = [paint(body, [1, 1, 1]), paint(head, [0.82, 0.78, 0.74])];
-  for (const x of [-0.28, 0.28]) for (const z of [-0.15, 0.15]) parts.push(cbox(x - 0.035, x + 0.035, 0, 0.44, z - 0.035, z + 0.035, [0.42, 0.37, 0.33]));
-  return mergeParts(parts);
-}
-
-let GEOS = null;
-const geos = () => (GEOS ||= { figure: figureGeo(), head: headGeo(), animal: animalGeo() });
-
-// people: [{ x, y, z, rot, col: [r,g,b], s }]
-function people(mats, list) {
-  const g = geos();
-  const group = new THREE.Group();
-  const m = new THREE.Matrix4(), q = new THREE.Quaternion(), p = new THREE.Vector3(), s = new THREE.Vector3(), c = new THREE.Color();
-  const robes = new THREE.InstancedMesh(g.figure, mats.figure, Math.max(1, list.length));
-  const heads = new THREE.InstancedMesh(g.head, mats.skin, Math.max(1, list.length));
-  robes.count = heads.count = list.length;
-  list.forEach((f, i) => {
-    m.compose(p.set(f.x, f.y, f.z), q.setFromAxisAngle(Y_AXIS, f.rot), s.setScalar(f.s || 1));
-    robes.setMatrixAt(i, m);
-    heads.setMatrixAt(i, m);
-    robes.setColorAt(i, c.setRGB(...f.col));
-  });
-  for (const im of [robes, heads]) {
-    im.castShadow = true;
-    im.userData.infoId = 'city-people';
-    im.computeBoundingSphere();
-    group.add(im);
-  }
-  return group;
-}
-
-// animals: [{ x, y, z, rot, col, sx, sy, sz }]
-function animals(mats, list) {
-  const im = new THREE.InstancedMesh(geos().animal, mats.animal, Math.max(1, list.length));
-  im.count = list.length;
-  const m = new THREE.Matrix4(), q = new THREE.Quaternion(), p = new THREE.Vector3(), s = new THREE.Vector3(), c = new THREE.Color();
-  list.forEach((a, i) => {
-    im.setMatrixAt(i, m.compose(p.set(a.x, a.y, a.z), q.setFromAxisAngle(Y_AXIS, a.rot), s.set(a.sx || 1, a.sy || 1, a.sz || 1)));
-    im.setColorAt(i, c.setRGB(...a.col));
-  });
-  im.castShadow = true;
-  im.userData.infoId = 'city-flock';
-  im.computeBoundingSphere();
-  return im;
-}
-
-// --- Smoke --------------------------------------------------------------------------
+// --- Smoke ---------------------------------------------------------------------------
 function smokeTexture() {
   const cnv = document.createElement('canvas');
   cnv.width = cnv.height = 64;
@@ -113,6 +45,7 @@ function smoke(points, { big = false, rand }) {
   const group = new THREE.Group();
   const n = big ? 14 : 6;
   for (const base of points) {
+    if (!base) continue;
     for (let i = 0; i < n; i++) {
       const mat = new THREE.SpriteMaterial({ map: SMOKE_TEX, color: big ? 0xcfc8bd : 0xd9d3c8, transparent: true, depthWrite: false, opacity: 0 });
       const sp = new THREE.Sprite(mat);
@@ -133,171 +66,317 @@ function smoke(points, { big = false, rand }) {
   return group;
 }
 
-// --- Placement ---------------------------------------------------------------------
+// --- Paths through the lanes --------------------------------------------------------------
+// Random walks along the street and lane cells of the city layout, kept
+// mostly straight, rounded off, with heights from the ground.
+function lanePaths(grid, rand, count, steps) {
+  const { occ, W, D, bb, cell } = grid;
+  const cells = [];
+  for (let k = 0; k < occ.length; k++) if (occ[k] === 2 || occ[k] === 3) cells.push(k);
+  if (!cells.length) return [];
+  const ok = (i, j) => i >= 0 && j >= 0 && i < W && j < D && (occ[j * W + i] === 2 || occ[j * W + i] === 3);
+  const DIRS = [[1, 0], [1, 1], [0, 1], [-1, 1], [-1, 0], [-1, -1], [0, -1], [1, -1]];
+  const paths = [];
+  for (let n = 0; n < count * 6 && paths.length < count; n++) {
+    const k = cells[Math.floor(rand() * cells.length)];
+    let i = k % W, j = Math.floor(k / W), d = Math.floor(rand() * 8);
+    const pts = [[bb.x0 + (i + 0.5) * cell, bb.z0 + (j + 0.5) * cell]];
+    for (let st = 0; st < steps; st++) {
+      const turn = rand() < 0.5 ? 1 : -1;
+      const order = rand() < 0.9 ? [0, turn, -turn, 2 * turn, -2 * turn] : [turn, 0, -turn, 2 * turn, -2 * turn];
+      let moved = false;
+      for (const o of order) {
+        const nd = (d + o + 8) % 8, [di, dj] = DIRS[nd];
+        if (!ok(i + di, j + dj) || (di && dj && !(ok(i + di, j) && ok(i, j + dj)))) continue;
+        i += di; j += dj; d = nd; moved = true;
+        break;
+      }
+      if (!moved) break;
+      pts.push([bb.x0 + (i + 0.5) * cell, bb.z0 + (j + 0.5) * cell]);
+    }
+    if (pts.length < 14) continue;
+    const thin = pts.filter((_, q) => q % 2 === 0 || q === pts.length - 1);
+    paths.push(new Path(smoothPts(thin).map(([x, z]) => [x, grid.at(x, z), z])));
+  }
+  return paths;
+}
+
+const line = (pts) => new Path(pts.map((p) => [p.x, p.y, p.z]));
+
 export function buildLife(mats, ctx) {
+  const kit = figureKit(ctx.quality);
   const rand = rng(2024);
   const pick = (arr) => arr[Math.floor(rand() * arr.length)];
-  const dress = () => (rand() < 0.08 ? pick(DYED) : pick(WOOL));
-  const scatter = (n, sample, accept, at, colour, face) => {
-    const out = [];
-    for (let k = 0; k < n * 30 && out.length < n; k++) {
-      const [u, v] = sample();
-      if (!accept(u, v)) continue;
-      const p = at(u, v);
-      out.push({ x: p.x, y: p.y, z: p.z, rot: face ? face(p) : rand() * 6.28, col: colour(), s: 0.93 + rand() * 0.12 });
-    }
-    return out;
+  const few = ctx.quality === 'low' ? 0.5 : 1;
+  const N = (n) => Math.max(1, Math.round(n * few));
+
+  // One person, dressed for their place in life.
+  const person = (kind, o = {}) => {
+    const old = rand() < 0.15;
+    const base = {
+      kind, skin: pick(SKIN), hair: old ? GREY : pick(HAIR), phase: rand() * 6.28,
+      speed: 1.05 + rand() * 0.4, lateral: (rand() - 0.5) * 1.4,
+    };
+    if (kind === 'man') Object.assign(base, { cloth: pick(WOOL), mantle: rand() < 0.15 ? pick(DYED) : pick(WOOL), face: old ? 2 : pick([0, 1, 6, 7]), prop: rand() < 0.12 ? PROP.staff : PROP.none });
+    if (kind === 'woman') Object.assign(base, { cloth: rand() < 0.2 ? pick(DYED) : pick(WOOL), mantle: rand() < 0.25 ? pick(DYED) : pick(WOOL), face: old ? 4 : 3, scale: 0.94 + rand() * 0.04 });
+    if (kind === 'priest') Object.assign(base, { cloth: LINEN, mantle: pick(DYED.slice(0, 2)), face: pick([1, 6, 2]), speed: 0.9 + rand() * 0.3 });
+    if (kind === 'worker') Object.assign(base, { cloth: pick(WOOL), mantle: pick(WOOL), face: pick([0, 7, 6]) });
+    if (kind === 'soldier') Object.assign(base, { cloth: pick([[0.45, 0.18, 0.1], [0.5, 0.42, 0.3]]), mantle: pick(WOOL), face: pick([0, 7]), prop: PROP.arms });
+    if (kind === 'child') Object.assign(base, { cloth: pick(WOOL), mantle: pick(WOOL), face: 5, scale: 0.6 + rand() * 0.14, speed: 1.2 + rand() * 0.5 });
+    if (kind !== 'child') base.scale = (base.scale || 1) * (0.96 + rand() * 0.08);
+    for (const k of Object.keys(o)) if (o[k] === undefined) delete o[k];
+    return { ...base, ...o };
   };
-  const box = (u0, u1, v0, v1) => () => [u0 + rand() * (u1 - u0), v0 + rand() * (v1 - v0)];
-  const faceTo = (tx, tz) => (p) => Math.atan2(tx - p.x, tz - p.z) + (rand() - 0.5) * 0.8;
+  const beast = (type, o = {}) => {
+    const T = {
+      sheep: { cloth: lin([0.86, 0.82, 0.72]), mantle: lin([0.45, 0.38, 0.33]), scale: 0.72 },
+      goat: { cloth: rand() < 0.7 ? lin([0.16, 0.14, 0.12]) : lin([0.5, 0.38, 0.26]), mantle: lin([0.12, 0.1, 0.09]), scale: 0.68 },
+      donkey: { cloth: lin([0.6, 0.56, 0.52]), mantle: lin([0.84, 0.82, 0.78]), scale: 1.25 },
+      ox: { cloth: lin([0.56, 0.42, 0.3]), mantle: lin([0.36, 0.27, 0.2]), scale: 1.62 },
+      jackal: { cloth: lin([0.72, 0.6, 0.42]), mantle: lin([0.3, 0.24, 0.18]), scale: 0.6 },
+    }[type];
+    return { kind: 'beast', ...T, skin: T.mantle, hair: T.mantle, phase: rand() * 6.28, speed: type === 'jackal' ? 0.9 : 0.35, ...o };
+  };
   const groups = {};
+  const crowds = {};
+  const make = (name) => (crowds[name] = new Crowd(name));
+  const facing = (from, to) => Math.atan2(to.x - from.x, to.z - from.z);
 
-  // Ezekiel's temple: priests in linen in the inner court (44:17), the people
-  // in the outer court, Levites at the north gate, the prince in the east gate.
-  const ezHouse = toWorld(-95, 0, 0);
-  const innerOK = (u, v) => !(Math.abs(u) < 11 && Math.abs(v) < 11) && !(u > 6 && u < 22 && Math.abs(v) < 3.5) && !(u > 14 && u < 42 && Math.abs(v) > 35);
-  const outerOK = (u, v) =>
-    !(u >= -153 && u <= 53 && Math.abs(v) <= 53) && !(u >= -172 && u <= -48 && Math.abs(v) >= 47 && Math.abs(v) <= 103)
-    && !(u <= -168 && Math.abs(v) <= 53) && !(Math.abs(v) >= 221 || u >= 221)
-    && !(Math.abs(u) <= 15 && Math.abs(v) >= 47 && Math.abs(v) <= 110) && !(u >= 47 && u <= 110 && Math.abs(v) <= 15)
-    && !(Math.abs(u) <= 15 && Math.abs(v) >= 195) && !(u >= 195 && Math.abs(v) <= 15);
-  const ez = [
-    ...scatter(26, box(-46, 46, -46, 46), innerOK, (u, v) => toWorld(u, I, v), () => LINEN, faceTo(ezHouse.x, ezHouse.z)),
-    ...scatter(4, box(-66, -57, -8, 8), () => true, (u, v) => toWorld(u, H, v), () => LINEN),
-    ...scatter(150, box(-240, 240, -240, 240), outerOK, (u, v) => toWorld(u, O, v), dress, faceTo(ezHouse.x, ezHouse.z)),
-    ...scatter(8, box(-22, 22, -113, -101), (u) => Math.abs(u) > 15, (u, v) => toWorld(u, O, v), () => pick(WOOL)),
-    ...[[-4, -205], [4, -205], [-4, 205], [4, 205]].map(([u, v]) => ({ ...toWorld(u, O, v), rot: v < 0 ? 0 : Math.PI, col: pick(WOOL), s: 1 })),
-    { ...toWorld(206, O, 0), rot: -Math.PI / 2, col: DYED[0], s: 1.02 },   // the prince (44:3)
-  ];
-  groups.ezFolk = people(mats, ez);
+  // --- Ezekiel's temple (solid) ------------------------------------------------------
+  // The people come in by the north gate and go out by the south, or the
+  // reverse (46:9); priests in linen in the inner court (44:17); Levites at the
+  // tables by the north gate (40:39–43); the prince in the east gate (44:3).
+  {
+    const c = make('ezFolk');
+    const ezHouse = toWorld(-95, 0, 0);
+    const loop = line([toWorld(0, O, -196), toWorld(60, O, -178), toWorld(118, O, -140), toWorld(118, O, 140), toWorld(60, O, 178), toWorld(0, O, 196)]);
+    for (let i = 0; i < N(70); i++) {
+      c.add(person(rand() < 0.5 ? 'man' : rand() < 0.85 ? 'woman' : 'child', { path: loop, s: rand() * loop.length, dir: rand() < 0.5 ? 1 : -1, pause: [0, 3], lateral: (rand() - 0.5) * 9 }));
+    }
+    const outerOK = (u, v) => !(u >= -153 && u <= 112 && Math.abs(v) <= 112) && !(Math.abs(v) >= 221 || u >= 196) && !(u < -165);
+    for (let i = 0, k = 0; i < N(70) && k < 4000; k++) {
+      const u = -240 + rand() * 480, v = -240 + rand() * 480;
+      if (!outerOK(u, v)) continue;
+      const p = toWorld(u, O, v);
+      c.add(person(rand() < 0.55 ? 'man' : 'woman', { ...p, yaw: facing(p, ezHouse) + (rand() - 0.5) * 0.6, act: rand() < 0.3 ? ACT.pray : rand() < 0.5 ? ACT.talk : ACT.idle }));
+      i++;
+    }
+    const priestPath = line([toWorld(18, I, -12), toWorld(26, I, -34)]);
+    const priestPath2 = line([toWorld(-40, I, 10), toWorld(14, I, 14)]);
+    for (let i = 0; i < N(16); i++) c.add(person('priest', { path: i % 2 ? priestPath : priestPath2, s: rand() * 20, dir: rand() < 0.5 ? 1 : -1, pause: [2, 9], lateral: (rand() - 0.5) * 3, always: rand() < 0.4 }));
+    for (let i = 0; i < N(10); i++) {
+      const p = toWorld((rand() - 0.5) * 40, I, (rand() - 0.5) * 30);
+      if (Math.abs(p.x - toWorld(0, 0, 0).x) < 6 && Math.abs(p.z) < 6) continue;
+      c.add(person('priest', { ...p, yaw: facing(p, ezHouse), act: rand() < 0.4 ? ACT.pray : ACT.idle }));
+    }
+    for (const s of [-1, 1]) for (let i = 0; i < 2; i++) {
+      const p = toWorld(s * (16 + i * 4), O, -106);
+      c.add(person('worker', { ...p, yaw: s * Math.PI / 2, act: ACT.work, cloth: LINEN }));
+    }
+    c.add(person('man', { ...toWorld(206, O, 0), yaw: -Math.PI / 2, mantle: DYED[0], cloth: DYED[1], always: true }));
+    groups.ezFolk = c.build(kit).group;
+  }
+  // The man "whose appearance was like bronze" measuring in the east gate,
+  // Ezekiel following him (40:3–6).
+  {
+    const c = make('ezSpecial');
+    const gate = line([toWorld(246, O, -2.5), toWorld(204, O, -2.5)]);
+    const man = c.add(person('man', { cloth: BRONZE, mantle: BRONZE, skin: BRONZE, hair: BRONZE, face: 1, prop: PROP.staff, path: gate, s: 8, speed: 0.55, pause: [3, 7], always: true, lateral: 0 }));
+    c.add(person('man', { kind: 'man', follow: man, gap: 1.6, lateral: 1.3, cloth: WOOL[1], mantle: WOOL[3], face: 6, always: true }));
+    groups.ezSpecial = c.build(kit).group;
+  }
 
-  // The man with the measuring reed and Ezekiel, inside the east gate (40:3).
-  const special = new THREE.Group();
-  const manAt = toWorld(194, O, -3), ezkAt = toWorld(194, O, 3);
-  const man = new THREE.Mesh(mergeParts([geos().figure.clone(), paint(geos().head.clone(), [1, 1, 1])]), mats.bronze);
-  man.position.copy(manAt);
-  man.rotation.y = -Math.PI / 2;
-  man.scale.setScalar(1.08);
-  const reed = new THREE.Mesh(new THREE.CylinderGeometry(0.022, 0.022, 6 * CUBIT, 6), mats.cedar);
-  reed.position.set(manAt.x - 0.25, manAt.y + 1.55, manAt.z - 0.32);
-  reed.rotation.x = 0.12;
-  const flax = new THREE.Mesh(new THREE.TorusGeometry(0.11, 0.035, 6, 14), mats.linen);
-  flax.position.set(manAt.x - 0.1, manAt.y + 0.95, manAt.z + 0.22);
-  flax.rotation.y = 0.5;
-  const ezk = new THREE.Mesh(mergeParts([geos().figure.clone(), paint(geos().head.clone(), [1, 1, 1])]), new THREE.MeshStandardMaterial({ color: 0x6f5a40, roughness: 1 }));
-  ezk.position.copy(ezkAt);
-  ezk.rotation.y = -Math.PI / 2 + 0.5;
-  for (const o of [man, reed, flax, ezk]) { o.castShadow = true; o.userData.infoId = 'city-man'; special.add(o); }
-  groups.ezSpecial = special;
-
-  // Solomon's temple: priests, Levite singers east of the altar (2 Chr 5:12),
-  // the people in the great court, guards and officials at the palace.
-  // c. 600 BC the altar of Ahaz stands in front, the bronze altar to its north.
+  // --- Solomon's temple ------------------------------------------------------------------
+  // Priests between altar, Sea and stands; Levite singers east of the altar
+  // (2 Chr 5:12); worshippers in the great court; officials and guards at
+  // the palace.
   const soHouse = S(20, 0, 0);
-  const soCommonOK = (u, v) => !(u >= -30 && u <= 90 && Math.abs(v) <= 30)
-    && !(u >= 59 && u <= 73 && v >= 31 && v <= 45) && !(Math.abs(v) >= 30 && Math.abs(v) <= 38 && u >= -3 && u <= 51);
-  const soEarlyOK = (u, v) => soCommonOK(u, v) && !(u >= 106 && u <= 130 && v >= -12 && v <= 32);
-  const soLateOK = (u, v) => soCommonOK(u, v) && !(u >= 123 && u <= 149 && v >= -13 && v <= 33)
-    && !(u >= 124 && u <= 148 && v >= -43 && v <= -19) && !(u >= 48 && u <= 72 && v <= -40);
-  groups.soFolkEarly = people(mats, [
-    ...scatter(26, box(-36, 156, -46, 46), soEarlyOK, (u, v) => S(u, I, v), () => LINEN, faceTo(soHouse.x, soHouse.z)),
-    ...scatter(14, box(132, 152, -20, 20), () => true, (u, v) => S(u, I, v), () => LINEN, faceTo(S(118, 0, 0).x, 0)),
-  ]);
-  groups.soFolkLate = people(mats, [
-    ...scatter(26, box(-36, 156, -46, 46), soLateOK, (u, v) => S(u, I, v), () => LINEN, faceTo(soHouse.x, soHouse.z)),
-    ...scatter(12, box(98, 120, 18, 44), () => true, (u, v) => S(u, I, v), () => LINEN, faceTo(S(136, 0, 0).x, 0)),
-  ]);
-  const court = (u0, u1, v0, v1) => (u, v) => !(u >= -44 && u <= 172 && Math.abs(v) <= 54) && u > u0 && u < u1 && v > v0 && v < v1;
-  groups.soCourtLate = people(mats, scatter(140, box(-115, 365, -240, 240), court(-115, 365, -240, 240), (u, v) => S(u, O, v), dress, faceTo(soHouse.x, soHouse.z)));
-  groups.soCourtEarly = people(mats, scatter(70, box(-75, 225, -122, 248), court(-75, 225, -122, 248), (u, v) => S(u, O, v), dress, faceTo(soHouse.x, soHouse.z)));
-  const halls = [[30, 130, 560, 610], [94, 146, 504, 545], [100, 140, 440, 480], [40, 100, 340, 420], [145, 195, 340, 400]];
-  const padOK = (u, v) => !halls.some(([a, b, c, d]) => u > a - 2 && u < b + 2 && v > c - 2 && v < d + 2);
-  groups.soPalace = people(mats, scatter(34, box(-78, 192, 322, 630), padOK, (u, v) => new THREE.Vector3(u * CUBIT, PALACE_PAD.y, v * CUBIT), () => (rand() < 0.35 ? DYED[0] : dress())));
-
-  // Townspeople in the streets and lanes; elders at the gates (Prov 31:23).
-  const town = (walk, n, site, gates) => {
-    const list = [];
-    for (let i = 0; i < n; i++) {
-      const [x, z] = walk();
-      list.push({ x, y: terrainY(x, z, site), z, rot: rand() * 6.28, col: dress(), s: 0.92 + rand() * 0.13 });
+  for (const v of ['early', 'late']) {
+    const c = make(v === 'early' ? 'soFolkEarly' : 'soFolkLate');
+    const altarU = v === 'early' ? 118 : 136;
+    const routes = [line([S(altarU - 10, I, 14), S(70, I, 30)]), line([S(altarU - 10, I, -14), S(92, I, -14)]), line([S(48, I, 30), S(4, I, 30)])];
+    for (let i = 0; i < N(18); i++) c.add(person('priest', { path: routes[i % 3], s: rand() * 30, dir: rand() < 0.5 ? 1 : -1, pause: [2, 10], lateral: (rand() - 0.5) * 3, always: rand() < 0.3 }));
+    for (let i = 0; i < N(12); i++) {
+      const p = v === 'early' ? S(136 + rand() * 16, I, -16 + rand() * 32) : S(100 + rand() * 20, I, 20 + rand() * 22);
+      c.add(person('priest', { ...p, yaw: facing(p, S(altarU, 0, 0)), act: rand() < 0.5 ? ACT.pray : ACT.idle, mantle: DYED[1] }));
     }
-    for (const [gx, gz] of gates) for (let i = 0; i < 4; i++) {
-      const x = gx + (rand() - 0.5) * 8, z = gz + (rand() - 0.5) * 8;
-      list.push({ x, y: terrainY(x, z, site), z, rot: rand() * 6.28, col: pick(WOOL), s: 1 });
+    groups[v === 'early' ? 'soFolkEarly' : 'soFolkLate'] = c.build(kit).group;
+  }
+  const courtFolk = (name, gates, box, n) => {
+    const c = make(name);
+    const target = () => S(172 + rand() * 10, O, (rand() - 0.5) * 70);
+    for (let i = 0; i < N(n * 0.45); i++) {
+      const g = pick(gates);
+      c.add(person(rand() < 0.5 ? 'man' : rand() < 0.85 ? 'woman' : 'child', {
+        path: line([S(g[0], O, g[1] + (rand() - 0.5) * 8), target()]), s: rand() * 100, dir: rand() < 0.5 ? 1 : -1, pause: [4, 20], lateral: (rand() - 0.5) * 2,
+        restAct: rand() < 0.5 ? ACT.pray : ACT.idle,
+      }));
     }
-    return people(mats, list);
+    for (let i = 0, k = 0; i < N(n * 0.55) && k < 4000; k++) {
+      const u = box[0] + rand() * (box[1] - box[0]), v = box[2] + rand() * (box[3] - box[2]);
+      if (u >= -44 && u <= 172 && Math.abs(v) <= 54) continue;
+      const p = S(u, O, v);
+      c.add(person(rand() < 0.55 ? 'man' : 'woman', { ...p, yaw: facing(p, soHouse) + (rand() - 0.5) * 0.7, act: rand() < 0.25 ? ACT.pray : rand() < 0.55 ? ACT.talk : ACT.idle }));
+      i++;
+    }
+    return c.build(kit).group;
   };
-  groups.townLate = town(ctx.walk.late, 420, 'square', ctx.gates.late);
-  groups.townEarly = town(ctx.walk.early, 140, 'sp', ctx.gates.early);
+  groups.soCourtLate = courtFolk('soCourtLate', [[362, 0], [EZ_U, 236]], [-115, 365, -240, 240], 150);
+  groups.soCourtEarly = courtFolk('soCourtEarly', [[222, 0], [EZ_U, 244]], [-75, 225, -122, 248], 80);
+  {
+    const c = make('soPalace');
+    const py = PALACE_PAD.y;
+    const P = (u, v) => new THREE.Vector3(u * CUBIT, py, v * CUBIT);
+    const routes = [line([P(EZ_U, 330), P(80, 430), P(80, 520)]), line([P(120, 490), P(165, 420)]), line([P(60, 330), P(60, 430)])];
+    for (let i = 0; i < N(22); i++) c.add(person(rand() < 0.75 ? 'man' : 'woman', { path: routes[i % 3], s: rand() * 60, dir: rand() < 0.5 ? 1 : -1, pause: [3, 12], lateral: (rand() - 0.5) * 4, mantle: rand() < 0.35 ? pick(DYED) : pick(WOOL) }));
+    for (const s of [-1, 1]) c.add(person('soldier', { ...P(EZ_U + s * 9, 326), yaw: 0, always: true }));
+    for (const s of [-1, 1]) c.add(person('soldier', { ...P(80 + s * 8, 616), yaw: 0, always: true }));
+    groups.soPalace = c.build(kit).group;
+  }
 
-  // Countryside: farmers, ploughing oxen, travellers with donkeys on the roads.
-  const country = (period) => {
-    const folk = [], beasts = [];
+  // --- The city --------------------------------------------------------------------------
+  // Walking the lanes (women often with a jar on the head), children, elders
+  // and traders at the gates (Prov 31:23; 2 Kgs 7:1), women grinding and
+  // baking at their doors, guards at the gates.
+  const town = (name, grid, n, houses, gates, torches) => {
+    const c = make(name);
+    const paths = lanePaths(grid, rand, Math.round(n * 1.4), 90);
+    c.setPathPool(paths);
+    // Half spread over the city; half "local", gathering wherever you look.
+    for (let i = 0; i < N(n) && paths.length; i++) {
+      const path = paths[Math.floor(rand() * paths.length)];
+      const r = rand();
+      const kind = r < 0.42 ? 'man' : r < 0.82 ? 'woman' : r < 0.94 ? 'child' : 'worker';
+      const o = { path, s: rand() * path.length, dir: rand() < 0.5 ? 1 : -1, pause: [1, 9], lateral: (rand() - 0.5) * 1.2, local: i % 2 === 0 };
+      if (kind === 'woman' && rand() < 0.35) Object.assign(o, { act: ACT.carry, prop: PROP.jar });
+      else if (kind === 'woman' && rand() < 0.2) o.prop = PROP.basket;
+      if (kind === 'worker' && rand() < 0.5) o.prop = PROP.basket;
+      c.add(person(kind, o));
+    }
+    for (const [gx, gz] of gates) for (let i = 0; i < 6; i++) {
+      const x = gx + (rand() - 0.5) * 12, z = gz + (rand() - 0.5) * 12;
+      c.add(person(i < 4 ? 'man' : 'woman', { x, y: grid.at(x, z), z, yaw: rand() * 6.28, act: i < 3 ? ACT.talk : ACT.idle, hair: i < 2 ? GREY : undefined, face: i < 2 ? 2 : undefined }));
+    }
+    for (const h of houses.filter((_, i) => i % Math.max(1, Math.round(houses.length / N(40))) === 0)) {
+      const off = h.d / 2 + 0.9;
+      const x = h.x + Math.sin(h.rot) * off, z = h.z + Math.cos(h.rot) * off;
+      c.add(person('woman', { x, y: grid.at(x, z), z, yaw: h.rot + Math.PI, act: ACT.work }));
+    }
+    // Guards stand a little off the wall, by the torches.
+    for (let i = 0; i < torches.length; i += 1) {
+      const t = torches[i], next = torches[i ^ 1];
+      const x = t.x + (t.x - next.x) * 0.15, z = t.z + (t.z - next.z) * 0.15;
+      c.add(person('soldier', { x, y: grid.at(x, z), z, yaw: rand() * 6.28, always: true }));
+    }
+    return c.build(kit).group;
+  };
+  groups.townLate = town('townLate', ctx.grids.late, 560, ctx.houses.late, ctx.gates.late, ctx.night.late.torches);
+  groups.townEarly = town('townEarly', ctx.grids.early, 220, ctx.houses.early, ctx.gates.early, ctx.night.early.torches);
+
+  // --- The countryside ------------------------------------------------------------------
+  // Farmers in the fields, ploughing teams, oxen threshing, travellers with
+  // donkeys on the roads.
+  const country = (name, period) => {
+    const c = make(name);
     const fields = ctx.plan.fields.filter((f) => period === 'early' || !insidePolygon(f.x, f.z, LATE_POLY));
-    for (let i = 0; i < 36; i++) {
+    const Y = (x, z) => terrainY(x, z, 'square');
+    for (let i = 0; i < N(30); i++) {
       const f = pick(fields);
-      const y = terrainY(f.x, f.z, 'square');
-      folk.push({ x: f.x, y, z: f.z, rot: f.ang, col: pick(WOOL), s: 1 });
-      if (f.kind === 0 && i % 3 === 0) {
-        for (const o of [-0.7, 0.7]) {
-          beasts.push({ x: f.x + Math.cos(f.ang) * 2.2 - Math.sin(f.ang) * o, y, z: f.z + Math.sin(f.ang) * 2.2 + Math.cos(f.ang) * o, rot: -f.ang, col: [0.45, 0.32, 0.22], sx: 1.9, sy: 1.8, sz: 1.6 });
-        }
+      const x = f.x + (rand() - 0.5) * f.w * 0.6, z = f.z + (rand() - 0.5) * f.d * 0.6;
+      c.add(person(rand() < 0.75 ? 'worker' : 'woman', { x, y: Y(x, z), z, yaw: f.ang + (rand() < 0.5 ? 0 : Math.PI), act: ACT.work }));
+    }
+    for (const f of fields.filter((ff) => ff.kind === 0).slice(0, N(8))) {
+      const ax = Math.cos(f.ang), az = Math.sin(f.ang), L = f.w * 0.42;
+      const pts = [];
+      for (let k = 0; k <= 8; k++) { const t = -L + (2 * L * k) / 8; pts.push([f.x + ax * t, Y(f.x + ax * t, f.z + az * t), f.z + az * t]); }
+      const plough = c.add(person('worker', { path: new Path(pts), s: rand() * L, speed: 0.55, pause: [1.5, 3], lateral: 0 }));
+      for (const s of [-0.65, 0.65]) c.add(beast('ox', { follow: plough, gap: -2.6, lateral: s }));
+    }
+    for (const fl of ctx.plan.floors.filter((t) => period === 'early' || !insidePolygon(t.x, t.z, LATE_POLY))) {
+      const ring = [];
+      for (let k = 0; k <= 16; k++) { const a = (k / 16) * Math.PI * 2, r = fl.r - 1.6; ring.push([fl.x + Math.cos(a) * r, Y(fl.x, fl.z) + 0.1, fl.z + Math.sin(a) * r]); }
+      c.add(beast('ox', { path: new Path(ring), loop: true, s: rand() * 30, speed: 0.5, pause: [0, 0], lateral: 0 }));
+      for (let k = 0; k < 2; k++) {
+        const a = rand() * 6.28, x = fl.x + Math.cos(a) * (fl.r + 1), z = fl.z + Math.sin(a) * (fl.r + 1);
+        c.add(person('worker', { x, y: Y(x, z), z, yaw: a + Math.PI, act: ACT.work, prop: PROP.staff }));
       }
     }
     for (const road of ROADS.filter((r) => r.periods.includes(period))) {
-      for (let i = 0; i < 6; i++) {
-        const k = 1 + Math.floor(rand() * (road.pts.length - 2));
-        const [ax, az] = road.pts[k - 1], [bx, bz] = road.pts[k];
-        const t = rand();
-        const x = ax + (bx - ax) * t, z = az + (bz - az) * t;
-        const y = terrainY(x, z, 'square');
-        const rot = Math.atan2(bx - ax, bz - az) + (rand() < 0.5 ? Math.PI : 0);
-        folk.push({ x, y, z, rot, col: dress(), s: 1 });
-        if (rand() < 0.55) beasts.push({ x: x + Math.sin(rot) * 1.6, y, z: z + Math.cos(rot) * 1.6, rot: rot - Math.PI / 2, col: [0.48, 0.44, 0.40], sx: 1.45, sy: 1.75, sz: 1.3 });
+      const pts = [];
+      let acc = 0;
+      for (let k = 0; k < road.pts.length - 1 && acc < 1600; k++) {
+        const [ax, az] = road.pts[k], [bx, bz] = road.pts[k + 1];
+        const n = Math.ceil(Math.hypot(bx - ax, bz - az) / 6);
+        for (let q = 0; q < n && acc < 1600; q++) {
+          const x = ax + (bx - ax) * q / n, z = az + (bz - az) * q / n;
+          pts.push([x, Y(x, z), z]);
+          acc += Math.hypot(bx - ax, bz - az) / n;
+        }
+      }
+      if (pts.length < 2) continue;
+      const path = new Path(pts);
+      for (let i = 0; i < N(7); i++) {
+        const t = c.add(person(rand() < 0.7 ? 'man' : 'woman', { path, s: rand() * path.length, dir: rand() < 0.5 ? 1 : -1, pause: [5, 30], lateral: (rand() < 0.5 ? -1 : 1) * 1.1, prop: rand() < 0.4 ? PROP.staff : PROP.none }));
+        if (rand() < 0.55) c.add(beast('donkey', { follow: t, gap: 2.1, lateral: 0 }));
       }
     }
-    const g = new THREE.Group();
-    g.add(people(mats, folk), animals(mats, beasts));
-    return g;
+    return c.build(kit).group;
   };
-  groups.countryEarly = country('early');
-  groups.countryLate = country('late');
-
-  // Flocks of sheep and black goats with their shepherds, in every period.
-  const centres = ctx.plan.folds.map((f) => [f.x + 22, f.z + 10]);
-  for (let i = 0; i < 4; i++) centres.push([1050 + rand() * 350, -500 + rand() * 1400]);
-  const flock = [], shepherds = [];
-  for (const [cx, cz] of centres) {
-    const n = 16 + Math.floor(rand() * 9);
-    const dir = rand() * 6.28;
-    for (let i = 0; i < n; i++) {
-      const r = Math.sqrt(rand()) * 16, a = rand() * 6.28;
-      const x = cx + Math.cos(a) * r, z = cz + Math.sin(a) * r;
-      const goat = rand() < 0.32;
-      const col = goat ? (rand() < 0.7 ? [0.1, 0.09, 0.08] : [0.38, 0.27, 0.18]) : [0.86, 0.82, 0.72];
-      flock.push({ x, y: terrainY(x, z, 'square'), z, rot: dir + (rand() - 0.5) * 1.6, col, sx: 1, sy: goat ? 1.08 : 1, sz: goat ? 0.9 : 1.05 });
+  groups.countryEarly = country('countryEarly', 'early');
+  groups.countryLate = country('countryLate', 'late');
+  // 573 BC: "some of the poorest of the land" left as vinedressers and
+  // ploughmen (2 Kgs 25:12; Jer 39:10).
+  {
+    const c = make('countryRuin');
+    const fields = ctx.plan.fields.filter((f) => !insidePolygon(f.x, f.z, LATE_POLY));
+    for (let i = 0; i < N(14); i++) {
+      const f = fields[Math.floor(rand() * fields.length)];
+      const x = f.x + (rand() - 0.5) * f.w * 0.5, z = f.z + (rand() - 0.5) * f.d * 0.5;
+      c.add(person(rand() < 0.7 ? 'worker' : 'woman', { x, y: terrainY(x, z, 'square'), z, yaw: rand() * 6.28, act: ACT.work, cloth: pick(WOOL.slice(1)) }));
     }
-    shepherds.push({ x: cx + 18, y: terrainY(cx + 18, cz, 'square'), z: cz, rot: rand() * 6.28, col: pick(WOOL), s: 1 });
+    groups.countryRuin = c.build(kit).group;
   }
-  const flocks = new THREE.Group();
-  flocks.add(animals(mats, flock), people(mats, shepherds));
-  groups.flocks = flocks;
+
+  // --- Flocks ------------------------------------------------------------------------------
+  // Sheep and black goats grazing with their shepherds, in every period
+  // (Lev 3:9; Song 4:1).
+  {
+    const c = make('flocks');
+    const centres = ctx.plan.folds.map((f) => [f.x + 22, f.z + 10]);
+    for (let i = 0; i < 4; i++) centres.push([1050 + rand() * 350, -500 + rand() * 1400]);
+    const Y = (x, z) => terrainY(x, z, 'square');
+    for (const [cx, cz] of centres) {
+      const n = N(16 + Math.floor(rand() * 9));
+      for (let i = 0; i < n; i++) {
+        const r = Math.sqrt(rand()) * 16, a = rand() * 6.28;
+        const x = cx + Math.cos(a) * r, z = cz + Math.sin(a) * r;
+        c.add(beast(rand() < 0.32 ? 'goat' : 'sheep', { x, y: Y(x, z), z, yaw: rand() * 6.28, act: ACT.graze, always: true, wander: { x: cx, z: cz, r: 20, y: Y, pause: [3, 14] } }));
+      }
+      const x = cx + 18, z = cz;
+      c.add(person('man', { x, y: Y(x, z), z, yaw: rand() * 6.28, prop: PROP.staff, always: true }));
+    }
+    groups.flocks = c.build(kit).group;
+  }
+
+  // --- 573 BC: "Mount Zion, which lies desolate; jackals prowl over it" (Lam 5:18).
+  {
+    const c = make('ruinLife');
+    const Y = () => BASE_Y + O * CUBIT;
+    for (const [u, v] of [[230, -60], [238, -52], [200, 120], [-90, -150]]) {
+      const p = S(u, O, v);
+      c.add(beast('jackal', { ...p, always: true, wander: { x: p.x, z: p.z, r: 40, y: Y, pause: [2, 9], rest: ACT.idle } }));
+    }
+    groups.ruinLife = c.build(kit).group;
+    groups.ruinLife.traverse((o) => { if (o.isInstancedMesh) o.userData.infoId = 'city-jackal'; });
+  }
 
   // Smoke from the altars (Isa 6:4), the temple kitchens and household fires.
   groups.smokeEz = smoke([ctx.ezAltar], { big: true, rand });
   groups.smokeEzKitchens = smoke(ctx.ezHearths.filter((_, i) => i % 4 === 0), { rand });
   groups.smokeSo = smoke([ctx.soAltar], { big: true, rand });
   groups.smokeSoLate = smoke([ctx.soAltarLate], { big: true, rand });
-
-  // 573 BC: "Mount Zion, which lies desolate; jackals prowl over it" (Lam 5:18).
-  const jackals = animals(mats, [[230, -60, 0.4], [238, -52, 2.2], [200, 120, 4.1], [-90, -150, 1.2]].map(([u, v, rot]) => {
-    const p = S(u, O, v);
-    return { x: p.x, y: p.y, z: p.z, rot, col: [0.6, 0.47, 0.32], sx: 0.8, sy: 0.72, sz: 0.55 };
-  }));
-  jackals.userData.infoId = 'city-jackal';
-  groups.ruinLife = jackals;
   groups.smokeLate = smoke(ctx.smoke.late, { rand });
   groups.smokeEarly = smoke(ctx.smoke.early, { rand });
 
-  return { groups, label: { label: 'The man with the measuring reed (40:3)', pos: manAt.clone().add(new THREE.Vector3(0, 6, 0)) } };
+  return { groups, crowds, label: { label: 'The man with the measuring reed (40:3)', pos: toWorld(225, O + 6, -3) } };
 }

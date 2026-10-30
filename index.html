@@ -129,6 +129,11 @@ body.panels-hidden #views, body.panels-hidden #info { display: none; }
 .time { display: flex; align-items: center; gap: 10px; }
 .time input { flex: 1; accent-color: var(--accent); }
 .time output { font: 13px var(--font-mono); min-width: 44px; text-align: right; }
+.time .play { flex: none; width: 30px; height: 26px; border-radius: 6px; border: 1px solid var(--line); background: rgba(236, 227, 207, 0.08); cursor: pointer; font-size: 11px; color: var(--stone); }
+.time .play[aria-pressed="true"] { border-color: var(--accent); }
+.speed { display: flex; gap: 4px; margin-top: 6px; }
+.speed button { flex: 1; border: 1px solid var(--line); background: transparent; color: var(--muted); border-radius: 6px; padding: 3px 4px; font: 11.5px var(--font-mono); cursor: pointer; }
+.speed button[aria-pressed="true"] { color: var(--stone); border-color: var(--accent); }
 .walk-btn {
   width: 100%; margin-top: 2px; padding: 8px 10px; border-radius: 8px; border: 1px solid var(--accent);
   background: transparent; color: var(--stone); cursor: pointer; font-weight: 500;
@@ -268,8 +273,14 @@ body.walking #walkpad.touch { display: grid; }
     <div class="section">
       <h3>Time of day</h3>
       <div class="time">
-        <input type="range" id="time" min="5.5" max="18.5" step="0.05" value="9" aria-label="Time of day">
-        <output id="time-out" for="time">09:00</output>
+        <button type="button" id="play" class="play" aria-pressed="true" aria-label="Pause the day">❚❚</button>
+        <input type="range" id="time" min="0" max="24" step="0.05" value="8" aria-label="Time of day">
+        <output id="time-out" for="time">08:00</output>
+      </div>
+      <div class="speed" role="group" aria-label="How fast the day runs">
+        <button type="button" data-speed="60" aria-pressed="true">1 h / min</button>
+        <button type="button" data-speed="360" aria-pressed="false">1 h / 10 s</button>
+        <button type="button" data-speed="1800" aria-pressed="false">1 h / 2 s</button>
       </div>
     </div>
   </aside>
