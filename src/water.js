@@ -146,6 +146,7 @@ export class Reflections {
     v.up.y = -v.up.y;
     v.lookAt(target);
     v.fov = camera.fov; v.aspect = camera.aspect; v.near = camera.near; v.far = camera.far;
+    v.view = camera.view ? { ...camera.view } : null;   // the tour shifts the picture clear of its card
     v.updateProjectionMatrix();
     v.updateMatrixWorld();
     // Is the water in front of the camera at all?

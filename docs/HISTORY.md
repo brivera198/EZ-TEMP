@@ -117,6 +117,8 @@ Figures give scale and show how spaces were used. They move through the day:
 
 Clothing follows the Lachish reliefs and the Bible: a tunic (kuttonet) under a mantle (simlah), a head-cloth or band and a short beard for men; long dresses and shawls over head and shoulders for women; linen and turbans for priests; pointed helmets, spears and round shields for soldiers. Most cloth is undyed wool; madder red, indigo and purple are rare. Faces and the number of people are the model's choices, not evidence.
 
+With Ezekiel's temple shown solid, the only figures in it in 573 BC are Ezekiel and the man with the measuring reed (Ezek 40:3). In the ruins of 573 BC there are no people in the temple courts, only jackals (Lam 5:18).
+
 ## Day and night
 
 | Feature | Notes and sources |
@@ -124,7 +126,23 @@ Clothing follows the Lachish reliefs and the Bible: a tunic (kuttonet) under a m
 | Lamps in doorways and windows after dark | Prov 31:18; the "light of the lamp" as a sign of a living city, taken away in Jer 25:10 (so none burn in the ruins of 573 BC) |
 | Fires in courtyards, torches at the gates | Household fires (Jer 36:22); torches and watchmen (Judg 7:16; Isa 62:6) |
 | The altar fire kept burning | Lev 6:13 |
-| A full moon at night | Passover and the Feast of Tabernacles fell at full moon (Lev 23:5–6, 34); the model always shows one | With Ezekiel's temple shown solid, the only figures in it in 573 BC are Ezekiel and the man with the measuring reed (Ezek 40:3). In the ruins of 573 BC there are no people in the temple courts, only jackals (Lam 5:18).
+| A full moon at night | Passover and the Feast of Tabernacles fell at full moon (Lev 23:5–6, 34); the model always shows one |
+
+## The guided tour
+
+The tour follows Ezekiel 40–48 in the order of the text. Its wording paraphrases the passages; the verse numbers on each card point to the source.
+
+| Feature | Status | Notes and sources |
+|---|---|---|
+| The measurements drawn in the scene | From the text | Each gold line is one figure of the passage being read, drawn on the part it measures. The label is the length of the line itself, so it shows what the model has, not a number typed in beside it |
+| Figures the Hebrew and Greek texts give differently | Stated on the card | The porch depth (11 or 12 cubits, 40:49), its ten steps (Greek), and "500 reeds" or cubits (42:16–20) |
+| The scene at each stop | Model's choice | Most stops show the vision as if built, on the mount as it lay in 573 BC (40:1). The first stop and the whole square show it as light, and 43:6–9 shows it over the city of the kings, c. 600 BC, where palace and temple shared a wall |
+| The hour at each stop | Model's choice | The text gives the date (40:1) and no hours. The tour runs through one day so the light changes from stop to stop. The glory comes before dawn and day breaks as it arrives, for "the earth shone with his glory" (43:2); the dawn is the model's, not the text's |
+| The river and the city appear late | From the text | Ezekiel sees the water only when he is brought back to the door of the house (47:1), and the city closes the book (48:30–35). The tour hides both until it reaches those passages, and puts back the layers you had on when you leave it |
+| The glory as a light without form | Conjectural | "The earth shone with his glory" and its sound was "like the sound of many waters" (43:2). The passage gives it no shape, and points back to the vision by the Chebar (43:3; ch. 1), which the model does not attempt |
+| Its way: from the Mount of Olives, by the east gate, into the house | From the text | It had left by the east gate and stopped "on the mountain east of the city" (10:18–19; 11:23); it returns "from the east" and enters "by the gate facing east" (43:2, 4); "the glory of the LORD filled the house" (43:5) |
+| It comes at sunrise | Model's choice | The text gives no hour. Sunrise is in the east, and the tour's day begins again there |
+| The distance to Babylonia, "some 900 km" | Approximate | Straight line from Jerusalem to Nippur, near which the Chebar canal ran (Ezek 1:1–3); the road by the Euphrates was far longer |
 
 ## Terrain
 

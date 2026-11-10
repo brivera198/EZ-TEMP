@@ -20,7 +20,7 @@ export class LightPool {
     this.tick = 0;
   }
 
-  // s: { pos (world), power (candela), range, lamp, nightOnly, shown() }
+  // s: { pos (world), power (candela), range, lamp, nightOnly, shown(), color, priority }
   add(s) {
     this.sources.push({ range: 28, lamp: false, nightOnly: false, phase: Math.random() * 10, ...s });
   }
@@ -36,7 +36,7 @@ export class LightPool {
         s.d2 = (s.pos.x - c.x) ** 2 + (s.pos.y - c.y) ** 2 + (s.pos.z - c.z) ** 2;
         if (s.d2 < 450 * 450) live.push(s);
       }
-      live.sort((a, b) => a.d2 - b.d2);
+      live.sort((a, b) => (b.priority ? 1 : 0) - (a.priority ? 1 : 0) || a.d2 - b.d2);
       this.active = live.slice(0, this.lights.length);
     }
     this.lights.forEach((l, i) => {
@@ -44,7 +44,7 @@ export class LightPool {
       if (!s) { l.intensity = 0; return; }
       const flick = s.lamp ? 0.95 + 0.05 * Math.sin(time * 9 + s.phase) : 0.82 + 0.12 * Math.sin(time * 11 + s.phase) * Math.sin(time * 7.3 + s.phase * 2) + 0.06 * Math.sin(time * 23 + s.phase);
       l.position.copy(s.pos);
-      l.color.copy(s.lamp ? LAMP : FIRE);
+      l.color.copy(s.color || (s.lamp ? LAMP : FIRE));
       l.distance = s.range;
       // Fires matter little against the sun; at night they carry the scene.
       l.intensity = s.power * flick * (s.lamp ? 1 : 0.35 + 0.65 * night);

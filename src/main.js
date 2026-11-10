@@ -22,6 +22,8 @@ import { Reflections, waterShared } from './water.js';
 import { LightPool } from './lights.js';
 import { shared as figureShared } from './people.js';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+import { createTour } from './tour.js';
+import { DIM_LAYER } from './dims.js';
 
 const $ = (s) => document.querySelector(s);
 const V = (x, y, z) => new THREE.Vector3(x, y, z);
@@ -61,6 +63,8 @@ controls.minDistance = 1;
 controls.maxDistance = 12000;
 controls.target.set(40, 130, 90);
 camera.layers.enable(1);                 // the cloud layer (mirror cameras leave it out)
+camera.layers.enable(DIM_LAYER);         // measurements drawn by the guided tour
+let tour = null;                         // the guided tour, made once the world is built
 
 // --- Sky, sun, environment ---------------------------------------------------------
 const sky = new Sky();
@@ -418,6 +422,8 @@ function updateLabels() {
   const cand = [];
   for (const l of labels) {
     let vis = layers.labels && !state.walking && !indoors;
+    // On the tour only the names a stop asks for stay; its measurements take their place.
+    if (tour?.active) vis &&= tour.labelOK(l.kind);
     if (l.kind === 'ez') vis &&= ez;
     if (l.kind === 'so') vis &&= vision !== 'solid';
     if (l.kind === 'river') vis &&= ez && layers.river;
@@ -1052,6 +1058,8 @@ function resize() {
   W.vclouds?.setSize(w * pr, h * pr);
   W.refl?.setSize(w * pr, h * pr);
   camera.aspect = w / h;
+  // On a tall screen keep the view at least 40° wide, so a building still fits.
+  camera.fov = THREE.MathUtils.clamp(THREE.MathUtils.radToDeg(2 * Math.atan(Math.tan(THREE.MathUtils.degToRad(20)) / camera.aspect)), 50, 74);
   camera.updateProjectionMatrix();
 }
 
@@ -1155,6 +1163,7 @@ function frame() {
   if (composer) composer.render(dt);
   else renderer.render(scene, camera);
   updateLabels();
+  tour?.update(now, dt, canvas.clientWidth, canvas.clientHeight);
   requestAnimationFrame(frame);
 }
 
@@ -1170,8 +1179,20 @@ build().then(() => {
   setScene({ ...h, fromHash: !!fromHash() });
   W.crowdsLevel(sky24.hours);
   setRunning(params.get('clock') !== 'stop');
+  tour = createTour({
+    scene, camera, controls, renderer, E, S, V, O, I, H, EYE, terrainY, flyTo, setScene, setTime, setRunning, clockState, sky24, state,
+    lights: W.lights, closeSheets,
+    setLayer: (name, on) => {
+      if (state.layers[name] === on) return;
+      state.layers[name] = on;
+      $('#lyr-' + name).checked = on;
+      applyVisibility();
+    },
+  });
+  // ?tour=N opens the tour at stop N.
+  if (params.has('tour')) tour.start(Math.max(0, (parseInt(params.get('tour'), 10) || 1) - 1));
   $('#loading').classList.add('done');
-  window.ezt = { scene, camera, controls, renderer, W, state, setScene, setTime, flyTo, select, viewSections, setRunning, clockState, sky24, terrainY, get composer() { return composer; }, get gtao() { return gtao; }, get bloom() { return bloom; } };
+  window.ezt = { scene, camera, controls, renderer, W, state, tour, setScene, setTime, flyTo, select, viewSections, setRunning, clockState, sky24, terrainY, get composer() { return composer; }, get gtao() { return gtao; }, get bloom() { return bloom; } };
   frame();
 }).catch((err) => {
   console.error(err);

@@ -10,6 +10,7 @@ An interactive 3D model of Jerusalem and its temple in three periods, with the t
 
 ## What you can do
 
+- **Take the guided tour**: *Guided tour* follows the man with the measuring reed through Ezekiel 40–48 in the order of the text, in 21 stops. Each stop takes you to the place, sets the hour, draws the measurements the passage gives as gold lines in the scene (in cubits and metres) and shows the passage, its figures and how Solomon's temple compares. At 43:1–5 the glory comes from the east over the Mount of Olives at sunrise, enters by the east gate and fills the house. The river and the city to the south appear when the text reaches them (47:1; 48:30). Step with *Next* and *Back* or the arrow keys, let it play by itself, or press *Explore from here* (Esc) at any stop to look around on your own.
 - **Look around**: drag to orbit, right-drag (or two fingers) to pan, scroll or pinch to zoom.
 - **Walk**: press *Walk at ground level*, then use W A S D or the arrow keys and drag to look. Shift runs. Esc stops. Walls stop you; steps do not.
 - **Measure**: click any building, room or object. The panel shows its dimensions in cubits and metres, the Hebrew term, and the verses. Where there is a counterpart in the other temple, one click takes you to it.
@@ -22,7 +23,7 @@ An interactive 3D model of Jerusalem and its temple in three periods, with the t
 - **Watch a day go by**: the clock runs by itself. Pause it, drag the hour, or speed it up. The sun crosses the sky and the clouds drift over, their shadows moving across the hills. After dusk the full moon and stars come out, lamps glow in doorways, and fires burn in courtyards, at the gates and on the altar.
 - **Meet the people**: men in tunics and mantles, women in shawls with water jars on their heads, children, priests in linen and soldiers with spears go about their day. They walk the lanes, trade and talk at the gates, grind and bake at their doors, plough and thresh, travel with donkeys, and pray with raised hands in the courts. More are out by day than at night. Walk among them at ground level to see their faces and clothes.
 
-Links: `#950`, `#600` and `#573` open a period; add `-glow` or `-solid` for the vision, for example `#600-glow` or `#573-solid`. Older links (`#ezekiel`, `#solomon-600`, `#overlay`) still work.
+Links: `#950`, `#600` and `#573` open a period; add `-glow` or `-solid` for the vision, for example `#600-glow` or `#573-solid`. Older links (`#ezekiel`, `#solomon-600`, `#overlay`) still work. `?tour=5` opens the guided tour at stop 5.
 
 ## Run it
 
@@ -35,7 +36,7 @@ python3 -m http.server 8000
 
 Opening `index.html` straight from disk will not work, because browsers block ES modules on `file://`. Three.js 0.160.0 and the fonts load from public CDNs.
 
-Graphics settings are automatic. Phones and machines with four or fewer cores get lighter geometry, fewer people, flat clouds and no screen effects. Other machines get volumetric clouds, mirror reflections, ambient occlusion, bloom and filmic tone mapping; the costliest of these are dropped if the frame rate suffers. To override, add `?quality=low` or `?quality=high`, and `fx=on` or `fx=off` (for example `?quality=high&fx=on`). Add `clock=stop` to start with the clock paused.
+Graphics settings are automatic. Phones and machines with four or fewer cores get lighter geometry, fewer people, flat clouds and no screen effects. Other machines get volumetric clouds, mirror reflections, ambient occlusion, bloom and filmic tone mapping; the costliest of these are dropped if the frame rate suffers. To override, add `?quality=low` or `?quality=high`, and `fx=on` or `fx=off` (for example `?quality=high&fx=on`). Add `clock=stop` to start with the clock paused. On a tall phone screen the view widens so that a building still fits.
 
 ## The measurements
 
@@ -66,6 +67,10 @@ Key choices:
 | `src/life.js` | Who is where doing what: townspeople, worshippers, priests, farmers, travellers, flocks, jackals, smoke |
 | `src/people.js` | Figures with clothing and faces, animated on the GPU; paths and crowds |
 | `src/vision.js` | The glowing, colour-coded overlay of Ezekiel's vision |
+| `src/tour.js` | The guided tour: stepping, the clock, the card, keeping the subject clear of the card |
+| `src/tour-stops.js` | The 21 stops: passage, figures, camera, measurements to draw, Solomon's counterpart |
+| `src/dims.js` | Measurement lines and their labels in the scene |
+| `src/glory.js` | The glory returning from the east (43:1–5), drawn as light |
 | `src/atmosphere.js` | Haze that thickens in the valleys and glows toward the sun; cloud shadows |
 | `src/sky.js` | Sun and moon, stars, volumetric clouds |
 | `src/water.js` | Rippling water with Fresnel reflection and mirror reflections |

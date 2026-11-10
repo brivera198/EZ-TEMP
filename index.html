@@ -61,6 +61,17 @@ button:focus-visible, input:focus-visible, select:focus-visible { outline: 2px s
 body[data-vision="glow"] .label.ez { border-color: rgba(255, 210, 122, 0.35); color: #fff3d6; }
 body[data-vision="glow"] .label.ez::before { background: #ffd27a; box-shadow: 0 0 6px #ffd27a; }
 .label.has-info:hover { border-color: var(--accent); }
+/* Measurements drawn in the scene during the tour */
+.label.dim {
+  padding: 3px 8px 4px; border-radius: 6px; text-align: center;
+  font: 500 12px/1.15 var(--font-mono); font-variant-numeric: tabular-nums;
+  background: rgba(14, 19, 27, 0.78); border-color: rgba(255, 207, 107, 0.5); transition: opacity 0.25s;
+}
+.label.dim::before { display: none; }
+.label.dim i { display: block; font-style: normal; font-size: 9.5px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); margin-bottom: 2px; }
+.label.dim b { color: #ffcf6b; font-weight: 500; font-size: 13.5px; }
+.label.dim span { color: var(--muted); font-size: 10.5px; margin-left: 6px; }
+.label.dim.note { font: 500 12.5px/1.15 var(--font-body); border-style: dashed; }
 
 /* Brand + mode switch */
 .brand {
@@ -96,6 +107,14 @@ body[data-vision="glow"] .label.ez::before { background: #ffd27a; box-shadow: 0 
 }
 .chip:hover { color: var(--stone); }
 body.panels-hidden #views, body.panels-hidden #info { display: none; }
+.brand-row { display: flex; align-items: center; gap: 8px; }
+.tour-btn {
+  border: 1px solid var(--gold); background: var(--gold); color: #17130b; border-radius: 999px;
+  padding: 5px 13px 6px; cursor: pointer; font-size: 13.5px; font-weight: 700; white-space: nowrap;
+  box-shadow: 0 2px 14px rgba(220, 171, 76, 0.3);
+}
+.tour-btn small { font: 500 11px/1 var(--font-mono); opacity: 0.75; margin-left: 5px; }
+.tour-btn:hover { background: #ecc063; }
 
 /* Panels */
 .panel {
@@ -178,6 +197,29 @@ body.panels-hidden #views, body.panels-hidden #info { display: none; }
   font: 12px/1.3 var(--font-mono); color: var(--stone); background: var(--panel); border: 1px solid var(--line);
   padding: 7px 12px; border-radius: 999px; white-space: nowrap; max-width: calc(100vw - 28px); overflow: hidden; text-overflow: ellipsis;
 }
+/* Guided tour */
+#tour-card {
+  left: calc(14px + env(safe-area-inset-left, 0px)); bottom: calc(14px + env(safe-area-inset-bottom, 0px));
+  width: 410px; max-height: calc(100% - 130px); display: flex; flex-direction: column; overflow: hidden;
+}
+#tour-card[hidden] { display: none; }
+.tour-progress { flex: none; height: 3px; background: var(--line); }
+.tour-progress i { display: block; height: 100%; width: 0; background: var(--gold); transition: width 0.4s; }
+.tour-body { overflow: auto; min-height: 0; padding: 14px 16px 6px; }
+.tour-body .eyebrow { color: var(--gold); }
+.tour-body > p { font-size: 15.5px; line-height: 1.5; }
+.tour-nav { flex: none; display: flex; gap: 6px; padding: 10px 12px 12px; border-top: 1px solid var(--line); }
+.tour-nav button {
+  border: 1px solid var(--line); background: rgba(236, 227, 207, 0.06); border-radius: 8px;
+  padding: 7px 11px; cursor: pointer; font-size: 13.5px; font-weight: 500; white-space: nowrap;
+}
+.tour-nav button:hover:not(:disabled) { border-color: var(--gold); }
+.tour-nav button:disabled { opacity: 0.35; cursor: default; }
+.tour-nav button[aria-pressed="true"] { border-color: var(--gold); color: #ffe2a6; }
+.tour-nav .primary { margin-left: auto; background: var(--gold); border-color: var(--gold); color: #17130b; padding: 7px 18px; }
+body.touring #views, body.touring #info, body.touring #hint, body.touring .mobile-bar,
+body.touring .modes, body.touring .vision, body.touring .chip, body.touring .tour-btn, body.touring .brand .sub { display: none; }
+
 #loading {
   position: absolute; inset: 0; display: grid; place-content: center; gap: 10px; text-align: center;
   background: radial-gradient(ellipse at center, #1a2230 0%, var(--ink) 70%); z-index: 20; transition: opacity 0.6s;
@@ -218,6 +260,13 @@ body.walking #walkpad.touch { display: grid; }
   }
   .mobile-bar button[aria-expanded="true"] { background: var(--accent); color: #17130b; }
   #walkpad { bottom: calc(70px + env(safe-area-inset-bottom, 0px)); }
+  #tour-card {
+    left: calc(10px + env(safe-area-inset-left, 0px)); right: calc(10px + env(safe-area-inset-right, 0px));
+    bottom: calc(10px + env(safe-area-inset-bottom, 0px)); width: auto; max-height: 46%;
+  }
+  .tour-body { padding: 12px 14px 4px; }
+  .tour-body > p { font-size: 14.5px; }
+  .tour-nav button { padding: 7px 9px; font-size: 13px; }
 }
 @media (prefers-reduced-motion: reduce) {
   #loading { transition: none; }
@@ -243,7 +292,10 @@ body.walking #walkpad.touch { display: grid; }
       <button type="button" data-vision="glow" aria-pressed="true">Glowing</button>
       <button type="button" data-vision="solid" aria-pressed="false">Solid</button>
     </div>
-    <button type="button" class="chip" id="toggle-panels" aria-pressed="false">Hide panels</button>
+    <div class="brand-row">
+      <button type="button" class="tour-btn" id="tour-start" title="Follow the man with the measuring reed through Ezekiel 40–48">Guided tour <small>Ezekiel 40–48</small></button>
+      <button type="button" class="chip" id="toggle-panels" aria-pressed="false">Hide panels</button>
+    </div>
   </header>
 
   <aside id="views" class="panel" aria-label="Views and layers">
@@ -299,6 +351,16 @@ body.walking #walkpad.touch { display: grid; }
     <button type="button" data-open="views" aria-expanded="false">Views</button>
     <button type="button" data-open="info" aria-expanded="false">Measurements</button>
   </div>
+  <section id="tour-card" class="panel card" aria-label="Guided tour" hidden>
+    <div class="tour-progress"><i id="tour-bar"></i></div>
+    <div class="tour-body" id="tour-body" aria-live="polite"></div>
+    <div class="tour-nav">
+      <button type="button" id="tour-prev">Back</button>
+      <button type="button" id="tour-auto" aria-pressed="false">Auto-play</button>
+      <button type="button" id="tour-exit">Explore from here</button>
+      <button type="button" id="tour-next" class="primary">Next</button>
+    </div>
+  </section>
   <div id="walkpad" aria-label="Walk controls">
     <span class="sp"></span><button type="button" data-k="f" aria-label="Forward">▲</button><span class="sp"></span>
     <button type="button" data-k="l" aria-label="Turn left">◀</button><button type="button" data-k="b" aria-label="Back">▼</button><button type="button" data-k="r" aria-label="Turn right">▶</button>
