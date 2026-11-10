@@ -60,7 +60,8 @@ controls.enableDamping = true;
 controls.dampingFactor = 0.08;
 controls.maxPolarAngle = Math.PI * 0.497;
 controls.minDistance = 1;
-controls.maxDistance = 12000;
+controls.maxDistance = 30000;
+controls.zoomToCursor = true;           // scroll toward what is under the pointer
 controls.target.set(40, 130, 90);
 camera.layers.enable(1);                 // the cloud layer (mirror cameras leave it out)
 camera.layers.enable(DIM_LAYER);         // measurements drawn by the guided tour
@@ -469,7 +470,9 @@ function updateLabels() {
 const state = {
   period: 'late',
   vision: 'glow',
+  cam: 'orbit',
   walking: false,
+  flying: false,
   layers: { labels: true, city: true, life: true, river: true, migrash: true, reeds: false, ezcity: false },
   selected: null,
 };
@@ -656,7 +659,7 @@ function viewSections() {
 
 let flight = null;
 function flyTo(pos, target, ms = 1700) {
-  if (state.walking) setWalking(false);
+  if (state.cam !== 'orbit') setCameraMode('orbit');
   flight = { p0: camera.position.clone(), t0: controls.target.clone(), p1: pos, t1: target, start: performance.now(), ms: matchMedia('(prefers-reduced-motion: reduce)').matches ? 1 : ms };
 }
 
@@ -884,14 +887,26 @@ canvas.addEventListener('pointerup', (e) => {
   down = null;
 });
 
-// --- Walking ------------------------------------------------------------------------
+// --- Camera: orbit, fly, walk -------------------------------------------------------
+// orbit: turn about a point (the default). fly: go anywhere, through walls,
+// from the ground to high above the hills. walk: first person at eye height,
+// stopped by walls but not by steps.
 const keys = new Set();
 const walk = { yaw: 0, pitch: 0, vy: 0 };
+const fly = { speed: 1 };                // multiplier, set with the wheel
+let panelsAuto = false;                  // panels hidden for flying or walking, to come back after
 const downRay = new THREE.Raycaster();
 const fwdRay = new THREE.Raycaster();
+const aimRay = new THREE.Raycaster();
 downRay.far = 60;
+const HINTS = {
+  orbit: 'Drag to look around · right-drag to pan · scroll to zoom · click anything for its sources',
+  fly: 'W A S D to fly · E or Space up · Q or C down · drag to look · Shift faster · scroll for speed · Esc to stop',
+  walk: 'W A S D or arrows to walk · drag to look · Shift to run · Esc to stop',
+};
 
 const solidTargets = () => solids.filter(isShown);
+const heightAboveGround = () => camera.position.y - terrainY(camera.position.x, camera.position.z);
 
 function groundAt(x, z, eyeY) {
   downRay.set(V(x, eyeY - 0.9, z), V(0, -1, 0));
@@ -900,64 +915,123 @@ function groundAt(x, z, eyeY) {
   return hits.length ? Math.max(hits[0].point.y, t) : t;
 }
 
-function setWalking(on) {
-  state.walking = on;
-  document.body.classList.toggle('walking', on);
-  $('#walk').setAttribute('aria-pressed', String(on));
-  $('#walk').textContent = on ? 'Stop walking (Esc)' : 'Walk at ground level';
-  controls.enabled = !on;
-  $('#hint').textContent = on
-    ? 'W A S D or arrows to walk · drag to look · Shift to run · Esc to stop'
-    : 'Drag to look around · right-drag to pan · scroll to zoom · click anything for its sources';
-  if (on) {
-    flight = null;
-    const t = controls.target.clone();
-    const g = groundAt(t.x, t.z, t.y + 2);
-    const dir = t.clone().sub(camera.position);
-    walk.yaw = Math.atan2(dir.x, -dir.z);
+// The first thing straight ahead of the camera: a building, or the ground.
+function aim(max) {
+  const d = camera.getWorldDirection(new THREE.Vector3());
+  aimRay.set(camera.position, d);
+  aimRay.far = max;
+  const hit = aimRay.intersectObjects(solidTargets(), false).find((h) => !h.object.material.transparent);
+  const limit = hit ? hit.distance : max;
+  // March along the ray for the ground, in steps that shrink as it nears.
+  const p = new THREE.Vector3();
+  for (let t = 0.5; t < limit;) {
+    p.copy(camera.position).addScaledVector(d, t);
+    const gap = p.y - terrainY(p.x, p.z);
+    if (gap < 0.2) return p;
+    t += Math.max(0.5, gap * 0.5);
+  }
+  return hit ? hit.point : null;
+}
+
+function lookFrom(dir) {
+  dir = dir.clone().normalize();
+  walk.yaw = Math.atan2(dir.x, -dir.z);
+  walk.pitch = Math.asin(THREE.MathUtils.clamp(dir.y, -1, 1));
+}
+const lookDir = () => V(Math.sin(walk.yaw) * Math.cos(walk.pitch), Math.sin(walk.pitch), -Math.cos(walk.yaw) * Math.cos(walk.pitch));
+
+function setCameraMode(mode) {
+  const from = state.cam;
+  if (mode === from) return;
+  flight = null;
+  state.cam = mode;
+  state.walking = mode === 'walk';
+  state.flying = mode === 'fly';
+  document.body.classList.toggle('walking', state.walking);
+  document.body.classList.toggle('flying', state.flying);
+  document.querySelectorAll('.cam button').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.cam === mode)));
+  $('#walk').setAttribute('aria-pressed', String(state.walking));
+  $('#walk').textContent = state.walking ? 'Stop walking (Esc)' : 'Walk at ground level';
+  controls.enabled = mode === 'orbit';
+  $('#hint').textContent = HINTS[mode];
+  keys.clear();
+  look = null;
+  walk.vy = 0;
+  // Clear the screen to look around; the panels come back with the orbit.
+  if (from === 'orbit') {
+    closeSheets();
+    panelsAuto = !matchMedia('(max-width: 860px)').matches && !document.body.classList.contains('panels-hidden');
+    if (panelsAuto) setPanelsHidden(true);
+  }
+  if (mode === 'orbit' && panelsAuto) { panelsAuto = false; setPanelsHidden(false); }
+  if (mode === 'orbit') {
+    // Turn about whatever you were looking at.
+    const d = camera.getWorldDirection(new THREE.Vector3());
+    const p = aim(4000);
+    controls.target.copy(p && p.distanceTo(camera.position) > 3 ? p : camera.position.clone().addScaledVector(d, 6));
+    return;
+  }
+  lookFrom(from === 'orbit' ? controls.target.clone().sub(camera.position) : camera.getWorldDirection(new THREE.Vector3()));
+  if (mode === 'walk') {
+    // Stand where you were looking: the centre of the orbit, or the ground ahead.
+    let at = from === 'orbit' ? controls.target.clone() : heightAboveGround() < 6 ? camera.position.clone() : aim(3000);
+    if (!at) at = camera.position.clone();
+    const g = groundAt(at.x, at.z, at.y + 2);
+    camera.position.set(at.x, g + 1.65, at.z);
     walk.pitch = 0;
-    camera.position.set(t.x, g + 1.65, t.z);
-  } else {
-    const f = V(Math.sin(walk.yaw), Math.sin(walk.pitch), -Math.cos(walk.yaw));
-    controls.target.copy(camera.position).addScaledVector(f, 6);
   }
 }
 
 addEventListener('keydown', (e) => {
-  if (e.target.closest('input, select, textarea')) return;
-  if (e.key === 'Escape' && state.walking) setWalking(false);
-  if (state.walking) { keys.add(e.code); if (e.code.startsWith('Arrow') || e.code === 'Space') e.preventDefault(); }
+  if (e.target.closest?.('input, select, textarea') || e.altKey || e.ctrlKey || e.metaKey) return;
+  if (state.cam === 'orbit') return;
+  if (e.key === 'Escape') { setCameraMode('orbit'); return; }
+  keys.add(e.code);
+  if (e.code.startsWith('Arrow') || e.code === 'Space' || e.code.startsWith('Page')) e.preventDefault();
 });
 addEventListener('keyup', (e) => keys.delete(e.code));
 addEventListener('blur', () => keys.clear());
 
 let look = null;
-canvas.addEventListener('pointerdown', (e) => { if (state.walking) { look = { x: e.clientX, y: e.clientY }; canvas.setPointerCapture(e.pointerId); } });
+canvas.addEventListener('pointerdown', (e) => { if (state.cam !== 'orbit') { look = { x: e.clientX, y: e.clientY }; canvas.setPointerCapture(e.pointerId); } });
 canvas.addEventListener('pointermove', (e) => {
-  if (!state.walking || !look) return;
+  if (state.cam === 'orbit' || !look) return;
+  const lim = state.flying ? 1.55 : 1.2;
   walk.yaw += (e.clientX - look.x) * 0.0042;
-  walk.pitch = THREE.MathUtils.clamp(walk.pitch - (e.clientY - look.y) * 0.0042, -1.2, 1.2);
+  walk.pitch = THREE.MathUtils.clamp(walk.pitch - (e.clientY - look.y) * 0.0042, -lim, lim);
   look = { x: e.clientX, y: e.clientY };
 });
 canvas.addEventListener('pointerup', () => { look = null; });
+// In flight the wheel sets the speed.
+canvas.addEventListener('wheel', (e) => {
+  if (!state.flying) return;
+  e.preventDefault();
+  fly.speed = THREE.MathUtils.clamp(fly.speed * (e.deltaY > 0 ? 0.8 : 1.25), 0.1, 10);
+  $('#hint').textContent = `Speed ×${fly.speed < 1 ? fly.speed.toFixed(2) : fly.speed.toFixed(1)} · ` + HINTS.fly;
+}, { passive: false });
 
 const pad = $('#walkpad');
 if (coarse) pad.classList.add('touch');
 pad.querySelectorAll('button').forEach((b) => {
-  const code = { f: 'KeyW', b: 'KeyS', l: 'ArrowLeft', r: 'ArrowRight' }[b.dataset.k];
+  const code = { f: 'KeyW', b: 'KeyS', l: 'ArrowLeft', r: 'ArrowRight', u: 'KeyE', d: 'KeyQ' }[b.dataset.k];
   b.addEventListener('pointerdown', (e) => { e.preventDefault(); keys.add(code); });
   for (const ev of ['pointerup', 'pointerleave', 'pointercancel']) b.addEventListener(ev, () => keys.delete(code));
 });
 
-function stepWalk(dt) {
+const held = (...codes) => codes.some((c) => keys.has(c));
+function turnAndAxes(dt) {
   if (keys.has('ArrowLeft')) walk.yaw -= 1.6 * dt;
   if (keys.has('ArrowRight')) walk.yaw += 1.6 * dt;
-  const speed = (keys.has('ShiftLeft') || keys.has('ShiftRight') ? 11 : 3.6) * dt;
-  let f = 0, s = 0;
-  if (keys.has('KeyW') || keys.has('ArrowUp')) f += 1;
-  if (keys.has('KeyS') || keys.has('ArrowDown')) f -= 1;
-  if (keys.has('KeyD')) s += 1;
-  if (keys.has('KeyA')) s -= 1;
+  return {
+    f: (held('KeyW', 'ArrowUp') ? 1 : 0) - (held('KeyS', 'ArrowDown') ? 1 : 0),
+    s: (held('KeyD') ? 1 : 0) - (held('KeyA') ? 1 : 0),
+    fast: held('ShiftLeft', 'ShiftRight'),
+  };
+}
+
+function stepWalk(dt) {
+  const { f, s, fast } = turnAndAxes(dt);
+  const speed = (fast ? 11 : 3.6) * dt;
   const fw = V(Math.sin(walk.yaw), 0, -Math.cos(walk.yaw));
   const rt = V(Math.cos(walk.yaw), 0, Math.sin(walk.yaw));
   const move = fw.multiplyScalar(f).add(rt.multiplyScalar(s));
@@ -973,20 +1047,38 @@ function stepWalk(dt) {
   const want = g + 1.65;
   if (camera.position.y > want + 0.05) { walk.vy -= 9.8 * dt; camera.position.y = Math.max(want, camera.position.y + walk.vy * dt); }
   else { walk.vy = 0; camera.position.y += (want - camera.position.y) * Math.min(1, dt * 12); }
-  const look = V(Math.sin(walk.yaw) * Math.cos(walk.pitch), Math.sin(walk.pitch), -Math.cos(walk.yaw) * Math.cos(walk.pitch));
-  camera.lookAt(camera.position.clone().add(look));
+  camera.lookAt(camera.position.clone().add(lookDir()));
+}
+
+// Flying: forward is where you look, so you climb or dive by looking up or
+// down. Speed grows with height, so the hills of Moab are as near as a lane.
+function stepFly(dt) {
+  const { f, s, fast } = turnAndAxes(dt);
+  const u = (held('KeyE', 'Space', 'PageUp') ? 1 : 0) - (held('KeyQ', 'KeyC', 'PageDown') ? 1 : 0);
+  const h = Math.max(0, heightAboveGround());
+  const speed = THREE.MathUtils.clamp(5 + h * 0.6, 5, 1500) * fly.speed * (fast ? 4 : 1) * dt;
+  const rt = V(Math.cos(walk.yaw), 0, Math.sin(walk.yaw));
+  const move = lookDir().multiplyScalar(f).add(rt.multiplyScalar(s)).add(V(0, u, 0));
+  if (move.lengthSq() > 0) camera.position.addScaledVector(move.normalize(), speed);
+  const p = camera.position;
+  p.x = THREE.MathUtils.clamp(p.x, -60000, 60000);
+  p.z = THREE.MathUtils.clamp(p.z, -60000, 60000);
+  p.y = THREE.MathUtils.clamp(p.y, terrainY(p.x, p.z) + 0.6, 12000);
+  camera.lookAt(p.clone().add(lookDir()));
 }
 
 // --- UI wiring ------------------------------------------------------------------------
 document.querySelectorAll('.modes button').forEach((b) => b.addEventListener('click', () => setScene({ period: b.dataset.period })));
 document.querySelectorAll('.vision button').forEach((b) => b.addEventListener('click', () => setScene({ vision: b.dataset.vision })));
 $('#strength').addEventListener('input', (e) => W.vis?.setStrength(parseFloat(e.target.value)));
-$('#walk').addEventListener('click', () => setWalking(!state.walking));
-$('#toggle-panels').addEventListener('click', (e) => {
-  const hidden = document.body.classList.toggle('panels-hidden');
-  e.currentTarget.setAttribute('aria-pressed', String(hidden));
-  e.currentTarget.textContent = hidden ? 'Show panels' : 'Hide panels';
-});
+$('#walk').addEventListener('click', () => setCameraMode(state.walking ? 'orbit' : 'walk'));
+document.querySelectorAll('.cam button').forEach((b) => b.addEventListener('click', () => setCameraMode(b.dataset.cam)));
+function setPanelsHidden(hidden) {
+  document.body.classList.toggle('panels-hidden', hidden);
+  $('#toggle-panels').setAttribute('aria-pressed', String(hidden));
+  $('#toggle-panels').textContent = hidden ? 'Show panels' : 'Hide panels';
+}
+$('#toggle-panels').addEventListener('click', () => { panelsAuto = false; setPanelsHidden(!document.body.classList.contains('panels-hidden')); });
 for (const k of Object.keys(state.layers)) {
   const el = $('#lyr-' + k);
   el.addEventListener('change', () => { state.layers[k] = el.checked; applyVisibility(); });
@@ -1018,6 +1110,8 @@ for (const [t, p] of tabs) {
   });
 }
 function openSheet(which) {
+  // Clicking something while flying or walking brings back the panel that tells of it.
+  if (which === 'info' && panelsAuto) { panelsAuto = false; setPanelsHidden(false); }
   if (!matchMedia('(max-width: 860px)').matches) return;
   for (const id of ['views', 'info']) {
     const on = id === which;
@@ -1093,6 +1187,7 @@ new ResizeObserver(resize).observe(canvas);
 function updateNear() {
   const ground = camera.position.y - terrainY(camera.position.x, camera.position.z);
   const near = state.walking ? 0.12
+    : state.flying ? THREE.MathUtils.clamp(Math.max(ground, 0.5) * 0.04, 0.12, 10)
     : THREE.MathUtils.clamp(Math.min(camera.position.distanceTo(controls.target), Math.max(ground, 0.5)) * 0.06, 0.12, 12);
   if (Math.abs(near - camera.near) > camera.near * 0.15) {
     camera.near = near;
@@ -1100,6 +1195,7 @@ function updateNear() {
   }
 }
 
+const flyFocus = new THREE.Vector3();
 const clock = new THREE.Clock();
 const ease = (t) => (t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2);
 let lastNow = performance.now();
@@ -1120,6 +1216,7 @@ function frame() {
     if (t >= 1) flight = null;
   }
   if (state.walking) stepWalk(dt);
+  else if (state.flying) stepFly(dt);
   else {
     controls.update();
     // Keep the camera out of the ground.
@@ -1133,8 +1230,18 @@ function frame() {
     setTime(hours);
     if (now - clockState.shown > 250) { $('#time').value = hours.toFixed(2); clockState.shown = now; }
   }
-  const focus = state.walking ? camera.position : controls.target;
-  updateShadowFrustum(focus, state.walking ? 120 : camera.position.distanceTo(controls.target));
+  let focus = controls.target, span = camera.position.distanceTo(controls.target);
+  if (state.walking) { focus = camera.position; span = 120; }
+  else if (state.flying) {
+    // Shadows and crowds where you are looking, on the ground ahead.
+    const h = Math.max(1, heightAboveGround());
+    const d = camera.getWorldDirection(flyFocus).setY(0);
+    if (d.lengthSq() > 1e-6) d.normalize();
+    focus = d.multiplyScalar(Math.min(h * 1.2, 600)).add(camera.position);
+    focus.y = terrainY(focus.x, focus.z);
+    span = THREE.MathUtils.clamp(h * 1.5, 60, 900);
+  }
+  updateShadowFrustum(focus, span);
   waterShared.wTime.value = time;
   figureShared.pTime.value = time;
   W.vis.shared.time.value = time;

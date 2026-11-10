@@ -11,8 +11,11 @@ An interactive 3D model of Jerusalem and its temple in three periods, with the t
 ## What you can do
 
 - **Take the guided tour**: *Guided tour* follows the man with the measuring reed through Ezekiel 40–48 in the order of the text, in 21 stops. Each stop takes you to the place, sets the hour, draws the measurements the passage gives as gold lines in the scene (in cubits and metres) and shows the passage, its figures and how Solomon's temple compares. At 43:1–5 the glory comes from the east over the Mount of Olives at sunrise, enters by the east gate and fills the house. The river and the city to the south appear when the text reaches them (47:1; 48:30). Step with *Next* and *Back* or the arrow keys, let it play by itself, or press *Explore from here* (Esc) at any stop to look around on your own.
-- **Look around**: drag to orbit, right-drag (or two fingers) to pan, scroll or pinch to zoom.
-- **Walk**: press *Walk at ground level*, then use W A S D or the arrow keys and drag to look. Shift runs. Esc stops. Walls stop you; steps do not.
+- **Choose a camera** with the *Camera* switch at the top:
+  - *Orbit* turns about a point: drag to orbit, right-drag (or two fingers) to pan, scroll or pinch to zoom toward the pointer.
+  - *Fly* goes anywhere, from a lane in the city to high over the hills, and through walls: W A S D to move where you look, E or Space up, Q or C down, drag to look, Shift for speed, scroll to set the speed. You fly faster the higher you are.
+  - *Walk* puts you in the streets in first person, at eye height where you were looking: W A S D or the arrow keys, drag to look, Shift to run. Walls stop you; steps do not.
+  - Esc returns to *Orbit* about whatever you were looking at. On a touch screen, buttons appear for moving (and for up and down in flight).
 - **Measure**: click any building, room or object. The panel shows its dimensions in cubits and metres, the Hebrew term, and the verses. Where there is a counterpart in the other temple, one click takes you to it.
 - **Choose a period**: *Solomon's time*, *Ezekiel's time* or *After the fall*. The city and the temple change together.
 - **Overlay Ezekiel's vision**: *Off* shows the period as it stood. *Glowing* lays Ezekiel's temple over it as light, coloured by part (gold house, orange altar, teal gates, violet chambers, rose western building, blue walls), with a strength slider; parts hidden behind solid buildings show through faintly. *Solid* shows Ezekiel's temple as if built, in place of Solomon's (c. 600 BC and 573 BC). The *Ezekiel vs Solomon* tab has a side-by-side table.

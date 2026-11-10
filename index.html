@@ -92,9 +92,9 @@ body[data-vision="glow"] .label.ez::before { background: #ffd27a; box-shadow: 0 
 .modes button b { font-size: 13.5px; font-weight: 600; }
 .modes button small { font: 500 11px/1.2 var(--font-mono); font-variant-numeric: tabular-nums; opacity: 0.85; }
 .modes button[aria-pressed="true"] { background: var(--lapis); color: #0e1520; }
-.vision { display: inline-flex; align-items: center; gap: 2px; background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 2px 2px 2px 10px; backdrop-filter: blur(8px); align-self: flex-start; }
-.vision .vlabel { font: 600 11px/1 var(--font-mono); text-transform: uppercase; letter-spacing: 0.1em; color: var(--muted); margin-right: 6px; }
-.vision button {
+.vision, .cam { display: inline-flex; align-items: center; gap: 2px; background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 2px 2px 2px 10px; backdrop-filter: blur(8px); align-self: flex-start; }
+.vision .vlabel, .cam .vlabel { font: 600 11px/1 var(--font-mono); text-transform: uppercase; letter-spacing: 0.1em; color: var(--muted); margin-right: 6px; }
+.vision button, .cam button {
   border: 0; background: transparent; padding: 5px 10px; border-radius: 6px; cursor: pointer;
   font-size: 13px; font-weight: 500; color: var(--muted); white-space: nowrap;
 }
@@ -122,7 +122,7 @@ body.panels-hidden #views, body.panels-hidden #info { display: none; }
   backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
   overflow: auto; overscroll-behavior: contain;
 }
-#views { top: calc(236px + env(safe-area-inset-top, 0px)); left: calc(14px + env(safe-area-inset-left, 0px)); width: 248px; max-height: calc(100% - 298px); padding: 12px; }
+#views { top: calc(274px + env(safe-area-inset-top, 0px)); left: calc(14px + env(safe-area-inset-left, 0px)); width: 248px; max-height: calc(100% - 336px); padding: 12px; }
 #info { top: calc(14px + env(safe-area-inset-top, 0px)); right: calc(14px + env(safe-area-inset-right, 0px)); width: 370px; max-height: calc(100% - 80px); display: flex; flex-direction: column; overflow: hidden; }
 .panel h3 {
   margin: 0 0 6px; font: 600 11px/1 var(--font-mono); text-transform: uppercase; letter-spacing: 0.12em; color: var(--muted);
@@ -218,7 +218,7 @@ body.panels-hidden #views, body.panels-hidden #info { display: none; }
 .tour-nav button[aria-pressed="true"] { border-color: var(--gold); color: #ffe2a6; }
 .tour-nav .primary { margin-left: auto; background: var(--gold); border-color: var(--gold); color: #17130b; padding: 7px 18px; }
 body.touring #views, body.touring #info, body.touring #hint, body.touring .mobile-bar,
-body.touring .modes, body.touring .vision, body.touring .chip, body.touring .tour-btn, body.touring .brand .sub { display: none; }
+body.touring .modes, body.touring .vision, body.touring .cam, body.touring .chip, body.touring .tour-btn, body.touring .brand .sub { display: none; }
 
 #loading {
   position: absolute; inset: 0; display: grid; place-content: center; gap: 10px; text-align: center;
@@ -235,14 +235,16 @@ body.touring .modes, body.touring .vision, body.touring .chip, body.touring .tou
 #walkpad { position: absolute; right: calc(16px + env(safe-area-inset-right, 0px)); bottom: calc(64px + env(safe-area-inset-bottom, 0px)); display: none; grid-template-columns: repeat(3, 48px); gap: 6px; }
 #walkpad button { height: 48px; border-radius: 10px; border: 1px solid var(--line); background: var(--panel); font-size: 18px; touch-action: none; }
 #walkpad .sp { visibility: hidden; }
-body.walking #walkpad.touch { display: grid; }
+body.walking #walkpad.touch, body.flying #walkpad.touch { display: grid; }
+body:not(.flying) #walkpad .fly-only { visibility: hidden; }
+.cam button[aria-pressed="true"] { background: var(--lapis); color: #0e1520; }
 
 @media (max-width: 860px) {
   .brand h1 { font-size: 24px; }
   .modes button { padding: 4px 8px 5px; }
   .modes button b { font-size: 12.5px; }
-  .vision .vlabel { display: none; }
-  .vision button { padding: 4px 8px; font-size: 12.5px; }
+  .vision .vlabel, .cam .vlabel { display: none; }
+  .vision button, .cam button { padding: 4px 8px; font-size: 12.5px; }
   .brand .sub, .chip { display: none; }
   #views, #info {
     left: calc(10px + env(safe-area-inset-left, 0px)); right: calc(10px + env(safe-area-inset-right, 0px));
@@ -291,6 +293,12 @@ body.walking #walkpad.touch { display: grid; }
       <button type="button" data-vision="off" aria-pressed="false">Off</button>
       <button type="button" data-vision="glow" aria-pressed="true">Glowing</button>
       <button type="button" data-vision="solid" aria-pressed="false">Solid</button>
+    </div>
+    <div class="cam" role="group" aria-label="Camera">
+      <span class="vlabel">Camera</span>
+      <button type="button" data-cam="orbit" aria-pressed="true" title="Turn about a point: drag, right-drag to pan, scroll to zoom">Orbit</button>
+      <button type="button" data-cam="fly" aria-pressed="false" title="Fly anywhere, through walls: W A S D, E up, Q down, drag to look">Fly</button>
+      <button type="button" data-cam="walk" aria-pressed="false" title="First person at eye height: W A S D, drag to look">Walk</button>
     </div>
     <div class="brand-row">
       <button type="button" class="tour-btn" id="tour-start" title="Follow the man with the measuring reed through Ezekiel 40–48">Guided tour <small>Ezekiel 40–48</small></button>
@@ -362,7 +370,7 @@ body.walking #walkpad.touch { display: grid; }
     </div>
   </section>
   <div id="walkpad" aria-label="Walk controls">
-    <span class="sp"></span><button type="button" data-k="f" aria-label="Forward">▲</button><span class="sp"></span>
+    <button type="button" data-k="u" class="fly-only" aria-label="Up">⤒</button><button type="button" data-k="f" aria-label="Forward">▲</button><button type="button" data-k="d" class="fly-only" aria-label="Down">⤓</button>
     <button type="button" data-k="l" aria-label="Turn left">◀</button><button type="button" data-k="b" aria-label="Back">▼</button><button type="button" data-k="r" aria-label="Turn right">▶</button>
   </div>
 
