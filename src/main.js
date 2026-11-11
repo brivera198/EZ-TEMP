@@ -33,8 +33,15 @@ const EYE = 1.65 / CUBIT;                                          // eye height
 const tick = () => new Promise((r) => setTimeout(r, 0));
 const coarse = matchMedia('(pointer: coarse)').matches;
 const params = new URLSearchParams(location.search);
-// Lighter geometry and no screen effects on phones and small machines.
-const QUALITY = params.get('quality') || (coarse || (navigator.hardwareConcurrency || 8) <= 4 ? 'low' : 'high');
+// Graphics: full on tablets and computers, lighter geometry and no screen
+// effects on phones and small machines. The visitor's own choice (the
+// Graphics switch) comes first. Browsers on tablets under-report their
+// cores, so a tablet is told by its screen, not its core count.
+const stored = (k) => { try { return localStorage.getItem(k); } catch { return null; } };
+const store = (k, v) => { try { if (v) localStorage.setItem(k, v); else localStorage.removeItem(k); } catch { /* private window */ } };
+const tablet = coarse && Math.min(screen.width, screen.height) >= 700;
+const CHOICE = [params.get('quality'), stored('ezt-graphics')].find((q) => q === 'low' || q === 'high') || null;
+const QUALITY = CHOICE || ((coarse && !tablet) || (!coarse && (navigator.hardwareConcurrency || 8) <= 4) ? 'low' : 'high');
 // Screen effects: 'on', 'off', or 'auto' (dropped if the frame rate suffers).
 const FX = params.get('fx') || (QUALITY === 'low' ? 'off' : 'auto');
 const PERIOD_KEYS = ['early', 'late', 'ruin'];
@@ -43,7 +50,7 @@ if (QUALITY === 'low') clouds.cloudOn.value = 0;   // cloud shadows cost a littl
 // --- Renderer, scene, camera ----------------------------------------------------
 const canvas = $('#scene');
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' });
-renderer.setPixelRatio(Math.min(devicePixelRatio, coarse ? 1.5 : 2));
+renderer.setPixelRatio(Math.min(devicePixelRatio, QUALITY === 'low' ? 1.5 : 2));
 renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 renderer.shadowMap.autoUpdate = false;   // once per frame (frame()), not for every extra render
@@ -94,7 +101,7 @@ let envRT = null;
 
 const sun = new THREE.DirectionalLight(0xfff0d8, 3);
 sun.castShadow = true;
-sun.shadow.mapSize.set(coarse ? 2048 : 4096, coarse ? 2048 : 4096);
+sun.shadow.mapSize.set(QUALITY === 'low' ? 2048 : 4096, QUALITY === 'low' ? 2048 : 4096);
 sun.shadow.bias = -0.0003;
 sun.shadow.normalBias = 0.5;
 sun.shadow.camera.near = 10;
@@ -1314,6 +1321,32 @@ function frame() {
 }
 
 // --- Start --------------------------------------------------------------------------------
+// The Graphics switch: the choice is kept for next time and the page reloads with it.
+document.querySelectorAll('.gfx button').forEach((b) => {
+  const choice = b.dataset.gfx === 'auto' ? null : b.dataset.gfx;
+  b.setAttribute('aria-pressed', String(choice === CHOICE));
+  b.addEventListener('click', () => {
+    store('ezt-graphics', choice);
+    store('ezt-graphics-failed', null);
+    // The address carries the choice too, for browsers that keep no storage.
+    const u = new URL(location.href);
+    if (choice) u.searchParams.set('quality', choice); else u.searchParams.delete('quality');
+    if (u.href === location.href) location.reload(); else location.href = u.href;
+  });
+});
+$('#gfx-now').textContent = `Now: ${QUALITY === 'low' ? 'low' : 'high'}${CHOICE ? '' : ' (chosen for this device)'}`;
+// If full graphics cannot start on this device, fall back to low once.
+const fallBack = (why) => {
+  if (QUALITY === 'low' || stored('ezt-graphics-failed')) return false;
+  console.warn('Full graphics failed, falling back to low:', why);
+  store('ezt-graphics-failed', '1');
+  store('ezt-graphics', 'low');
+  const u = new URL(location.href);
+  u.searchParams.set('quality', 'low');
+  location.href = u.href;
+  return true;
+};
+canvas.addEventListener('webglcontextlost', () => fallBack('the graphics context was lost'));
 build().then(() => {
   setupEffects();
   W.vis.baseGain = composer ? 2.2 : 1;   // brighter where bloom can spread it
@@ -1342,6 +1375,7 @@ build().then(() => {
   frame();
 }).catch((err) => {
   console.error(err);
+  if (fallBack(err.message)) return;
   $('#load-step').textContent = 'The model could not be built.';
   const e = $('#error');
   e.style.display = 'block';

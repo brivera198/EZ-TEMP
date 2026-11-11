@@ -150,9 +150,11 @@ body.panels-hidden #views, body.panels-hidden #info { display: none; }
 .time output { font: 13px var(--font-mono); min-width: 44px; text-align: right; }
 .time .play { flex: none; width: 30px; height: 26px; border-radius: 6px; border: 1px solid var(--line); background: rgba(236, 227, 207, 0.08); cursor: pointer; font-size: 11px; color: var(--stone); }
 .time .play[aria-pressed="true"] { border-color: var(--accent); }
-.speed { display: flex; gap: 4px; margin-top: 6px; }
-.speed button { flex: 1; border: 1px solid var(--line); background: transparent; color: var(--muted); border-radius: 6px; padding: 3px 4px; font: 11.5px var(--font-mono); cursor: pointer; }
-.speed button[aria-pressed="true"] { color: var(--stone); border-color: var(--accent); }
+.speed, .gfx { display: flex; gap: 4px; margin-top: 6px; }
+.gfx { margin-top: 2px; }
+.gfx-note { font: 11.5px var(--font-mono); color: var(--muted); margin-top: 6px; }
+.speed button, .gfx button { flex: 1; border: 1px solid var(--line); background: transparent; color: var(--muted); border-radius: 6px; padding: 3px 4px; font: 11.5px var(--font-mono); cursor: pointer; }
+.speed button[aria-pressed="true"], .gfx button[aria-pressed="true"] { color: var(--stone); border-color: var(--accent); }
 .walk-btn {
   width: 100%; margin-top: 2px; padding: 8px 10px; border-radius: 8px; border: 1px solid var(--accent);
   background: transparent; color: var(--stone); cursor: pointer; font-weight: 500;
@@ -342,6 +344,15 @@ body:not(.flying) #walkpad .fly-only { visibility: hidden; }
         <button type="button" data-speed="360" aria-pressed="false">1 h / 10 s</button>
         <button type="button" data-speed="1800" aria-pressed="false">1 h / 2 s</button>
       </div>
+    </div>
+    <div class="section">
+      <h3>Graphics</h3>
+      <div class="gfx" role="group" aria-label="Graphics quality (reloads the page)">
+        <button type="button" data-gfx="auto" aria-pressed="true">Auto</button>
+        <button type="button" data-gfx="high" aria-pressed="false">High</button>
+        <button type="button" data-gfx="low" aria-pressed="false">Low</button>
+      </div>
+      <div class="gfx-note" id="gfx-now"></div>
     </div>
   </aside>
 
