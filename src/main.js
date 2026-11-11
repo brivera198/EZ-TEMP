@@ -7,9 +7,9 @@ import { GTAOPass } from 'three/addons/postprocessing/GTAOPass.js';
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
-import { INFO, COMPARE, LANDMARKS, CUBIT, BASE_Y, LEVEL, PERIODS } from './data.js';
+import { INFO, COMPARE, LANDMARKS, CUBIT, BASE_Y, LEVEL, PERIODS, SOLOMON_PLATFORM, PALACE_PAD } from './data.js';
 import { makeMaterials, nightLights } from './materials.js';
-import { buildTerrain, terrainY, applySite, installTerrainShader, paintOverlay, PODIUM } from './terrain.js';
+import { buildTerrain, terrainY, applySite, installTerrainShader, paintOverlay, PODIUM, inRect } from './terrain.js';
 import { buildCity, planCountryside } from './city.js';
 import { buildLife, focus as crowdFocus } from './life.js';
 import { buildNature, overgrowth } from './nature.js';
@@ -247,6 +247,11 @@ const fireMeshes = [];
 const solids = [];
 const overlays = {};
 const LATER = ['late', 'ruin'];
+// Detail modules: each adds one kind of detail to the land and its people
+// through the same small interface (see docs/MODULES.md). One that is
+// missing or fails is left out; the rest of the world still builds.
+const DETAIL_MODULES = ['props', 'trades', 'fauna', 'flora'];
+const details = [];
 
 async function build() {
   const step = async (txt, pct) => { $('#load-step').textContent = txt; $('#load-bar').style.width = pct + '%'; await tick(); };
@@ -338,6 +343,29 @@ async function build() {
   for (const v of ['late', 'early']) {
     for (const p of W.city.night[v].fires) W.lights.add({ pos: p.clone().setY(p.y + 0.7), power: 5, range: 14, nightOnly: true, shown: () => W.flames[v].visible });
     for (const p of W.city.night[v].torches) W.lights.add({ pos: p, power: 12, range: 20, nightOnly: true, shown: () => W.flames[v].visible });
+  }
+
+  await step('Adding the details of daily life…', 90);
+  // Clear of the temple platforms and the palace, which change with the vision shown.
+  const free = (x, z, m = 6) => !inRect(x, z, PODIUM, m) && !inRect(x, z, SOLOMON_PLATFORM, m) && !inRect(x, z, PALACE_PAD, m);
+  for (const name of DETAIL_MODULES) {
+    try {
+      const mod = await import(`./${name}.js`);
+      const d = mod.build(W.mats, { quality: QUALITY, plan: W.plan, city: W.city, terrainY, free }) || {};
+      d.name = name;
+      d.groups ||= [];
+      for (const g of d.groups) scene.add(g.group);
+      const shownIn = (periods) => () => (!periods || periods.includes(state.period)) && state.layers[d.layer || 'city'];
+      for (const l of d.lights || []) W.lights.add({ ...l, shown: shownIn(l.periods) });
+      fireMeshes.push(...(d.fireMeshes || []));
+      for (const l of d.labels || []) addLabel(l.label, l.pos, 'city', { far: l.far || 1200, small: true, periods: l.periods, info: l.info });
+      Object.assign(INFO, d.info || {});
+      allZones.push(...(d.zones || []).map((z) => ({ mode: 'both', ...z })));
+      details.push(d);
+    } catch (e) {
+      console.warn(`Detail module "${name}" left out: ${e.message}`);
+    }
+    await tick();
   }
 
   // Everything you can stand on when walking.
@@ -522,6 +550,10 @@ function applyVisibility() {
   // Houses on the Ophel terrace only where no palace is shown.
   c.padLate.visible = city && late && solid;
   c.padRuin.visible = city && ruin && solid;
+
+  for (const d of details) for (const g of d.groups) {
+    g.group.visible = (!g.periods || g.periods.includes(period)) && layers[g.layer || d.layer || 'city'];
+  }
 
   const L = W.life.groups, life = layers.life;
   L.ezFolk.visible = life && solid && late;
@@ -836,7 +868,7 @@ const within = (o, root) => { for (; o; o = o.parent) if (o === root) return tru
 
 function pickTargets() {
   const roots = [W.terrain.mesh, W.ez.group, W.vision.group, W.river.group, W.plat.square.group, W.plat.sp.group, W.plat.shared.group,
-    W.nature, W.weeds, ...Object.values(W.city.groups), ...Object.values(W.life.groups)];
+    W.nature, W.weeds, ...Object.values(W.city.groups), ...Object.values(W.life.groups), ...details.flatMap((d) => d.groups.map((g) => g.group))];
   for (const v of PERIOD_KEYS) roots.push(W.so[v].templeGroup, W.so[v].siteGroup, W.so[v].courtGroup);
   return roots.filter((r) => r.visible);
 }
@@ -1196,6 +1228,8 @@ function updateNear() {
 }
 
 const flyFocus = new THREE.Vector3();
+// What a detail module is told each frame: the hour, the scene, and where the viewer is and looks.
+const detailEnv = { time: 0, hours: 9, day: 1, night: 0, period: 'late', walking: false, flying: false, camera, focus: crowdFocus, quality: QUALITY };
 const clock = new THREE.Clock();
 const ease = (t) => (t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2);
 let lastNow = performance.now();
@@ -1260,6 +1294,11 @@ function frame() {
   W.lights.update(camera, time, sky24.night);
   crowdFocus.copy(focus);
   for (const g of Object.values(W.life.groups)) if (g.visible && g.userData.update) g.userData.update(time, dt);
+  if (details.length) {
+    detailEnv.time = time; detailEnv.hours = sky24.hours; detailEnv.day = sky24.day; detailEnv.night = sky24.night;
+    detailEnv.period = state.period; detailEnv.walking = state.walking; detailEnv.flying = state.flying;
+    for (const d of details) d.update?.(time, dt, detailEnv);
+  }
   // Extra renders before the main one: the mirror for the nearest pool, the
   // cloud layer, and now and then the reflection probe.
   camera.updateMatrixWorld();
