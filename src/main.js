@@ -1338,7 +1338,7 @@ build().then(() => {
   // ?tour=N opens the tour at stop N.
   if (params.has('tour')) tour.start(Math.max(0, (parseInt(params.get('tour'), 10) || 1) - 1));
   $('#loading').classList.add('done');
-  window.ezt = { scene, camera, controls, renderer, W, state, tour, setScene, setTime, flyTo, select, viewSections, setRunning, clockState, sky24, terrainY, get composer() { return composer; }, get gtao() { return gtao; }, get bloom() { return bloom; } };
+  window.ezt = { scene, camera, controls, renderer, W, details, state, tour, setScene, setTime, flyTo, select, viewSections, setRunning, clockState, sky24, terrainY, get composer() { return composer; }, get gtao() { return gtao; }, get bloom() { return bloom; } };
   frame();
 }).catch((err) => {
   console.error(err);
