@@ -6,9 +6,10 @@ import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { GTAOPass } from 'three/addons/postprocessing/GTAOPass.js';
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
+import { SMAAPass } from 'three/addons/postprocessing/SMAAPass.js';
 import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
 import { INFO, COMPARE, LANDMARKS, CUBIT, BASE_Y, LEVEL, PERIODS, SOLOMON_PLATFORM, PALACE_PAD } from './data.js';
-import { makeMaterials, nightLights } from './materials.js';
+import { makeMaterials, nightLights, surfShared, texturesReady } from './materials.js';
 import { buildTerrain, terrainY, applySite, installTerrainShader, paintOverlay, PODIUM, inRect } from './terrain.js';
 import { buildCity, planCountryside } from './city.js';
 import { buildLife, focus as crowdFocus } from './life.js';
@@ -19,11 +20,12 @@ import { makeVisionLooks, VISION_PARTS } from './vision.js';
 import { atmo, patchScene, clouds, buildClouds } from './atmosphere.js';
 import { celestial, VolumetricClouds, weatherTexture, buildStars, buildMoon } from './sky.js';
 import { Reflections, waterShared } from './water.js';
-import { LightPool } from './lights.js';
+import { LightPool, installSunCascade, placeShadow } from './lights.js';
 import { shared as figureShared } from './people.js';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 import { createTour } from './tour.js';
 import { DIM_LAYER } from './dims.js';
+import { CollisionWorld, Body, Head, BODY, Controls, flyStep } from './walker.js';
 
 const $ = (s) => document.querySelector(s);
 const V = (x, y, z) => new THREE.Vector3(x, y, z);
@@ -33,29 +35,73 @@ const EYE = 1.65 / CUBIT;                                          // eye height
 const tick = () => new Promise((r) => setTimeout(r, 0));
 const coarse = matchMedia('(pointer: coarse)').matches;
 const params = new URLSearchParams(location.search);
-// Graphics: full on tablets and computers, lighter geometry and no screen
-// effects on phones and small machines. The visitor's own choice (the
-// Graphics switch) comes first. Browsers on tablets under-report their
-// cores, so a tablet is told by its screen, not its core count.
+// Graphics. The visitor's own choice (the Graphics switch, or ?quality=)
+// comes first. Otherwise the page looks at the graphics chip itself rather
+// than guessing from the pointer or the core count (tablets and phones
+// under-report their cores): a recent phone, a tablet or a computer gets the
+// full pipeline, and the governor (govern) then trades resolution and effects
+// for frame rate on the frames it measures. Only software rendering, WebGL 1,
+// very little memory and old phone chips start on 'low'.
 const stored = (k) => { try { return localStorage.getItem(k); } catch { return null; } };
 const store = (k, v) => { try { if (v) localStorage.setItem(k, v); else localStorage.removeItem(k); } catch { /* private window */ } };
 const tablet = coarse && Math.min(screen.width, screen.height) >= 700;
 const CHOICE = [params.get('quality'), stored('ezt-graphics')].find((q) => q === 'low' || q === 'high') || null;
-const QUALITY = CHOICE || ((coarse && !tablet) || (!coarse && (navigator.hardwareConcurrency || 8) <= 4) ? 'low' : 'high');
+const canvas = $('#scene');
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' });
+function autoQuality() {
+  const gl = renderer.getContext();
+  if (!renderer.capabilities.isWebGL2) return 'low';
+  let gpu = '';
+  try {
+    const ext = gl.getExtension('WEBGL_debug_renderer_info');
+    gpu = String(gl.getParameter(ext ? ext.UNMASKED_RENDERER_WEBGL : gl.RENDERER) || '');
+  } catch { /* not told */ }
+  if (/swiftshader|llvmpipe|softpipe|software|basic render/i.test(gpu)) return 'low';
+  if (navigator.deviceMemory && navigator.deviceMemory <= 2) return 'low';
+  if (!coarse || tablet) return 'high';
+  // A phone: Apple's own GPUs (every recent iPhone reports "Apple GPU"), and
+  // recent Adreno, Mali, Immortalis and Xclipse chips manage the full pipeline.
+  if (/apple/i.test(gpu)) return 'high';
+  const adreno = /adreno[^0-9]*([0-9]{3})/i.exec(gpu);
+  if (adreno) return +adreno[1] >= 640 ? 'high' : 'low';
+  if (/immortalis|xclipse|mali-g(7[1-9]|[89][0-9]|6[1-9][0-9]|7[0-9][0-9])/i.test(gpu)) return 'high';
+  return gpu ? 'low' : 'high';
+}
+const QUALITY = CHOICE || autoQuality();
+// Anything that goes wrong is listed in the Graphics section of the Views
+// panel, so a visitor on a device nobody has tested can say what happened.
+const problems = [];
+function report(msg) {
+  msg = String(msg).slice(0, 220);
+  if (problems.length >= 6 || problems.includes(msg)) return;
+  problems.push(msg);
+  const el = $('#gfx-diag');
+  if (el) { el.hidden = false; el.textContent = problems.join('\n'); }
+}
+addEventListener('error', (e) => report(`${e.message} (${String(e.filename || '').split('/').pop()}:${e.lineno || 0})`));
+addEventListener('unhandledrejection', (e) => report(e.reason?.message || e.reason));
+renderer.debug.onShaderError = (gl, program, vs, fs) => {
+  const log = gl.getShaderInfoLog(fs) || gl.getShaderInfoLog(vs) || gl.getProgramInfoLog(program) || 'no log';
+  report('Shader failed: ' + log.split('\n').find((l) => l.trim()) );
+};
 // Screen effects: 'on', 'off', or 'auto' (dropped if the frame rate suffers).
 const FX = params.get('fx') || (QUALITY === 'low' ? 'off' : 'auto');
 const PERIOD_KEYS = ['early', 'late', 'ruin'];
 if (QUALITY === 'low') clouds.cloudOn.value = 0;   // cloud shadows cost a little on every lit pixel
+installSunCascade();
 
 // --- Renderer, scene, camera ----------------------------------------------------
-const canvas = $('#scene');
-const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' });
-renderer.setPixelRatio(Math.min(devicePixelRatio, QUALITY === 'low' ? 1.5 : 2));
+// The screen's own resolution (up to 2 device pixels per CSS pixel), times a
+// scale the governor lowers when frames are slow and raises when they are fast.
+const BASE_RATIO = Math.min(devicePixelRatio || 1, QUALITY === 'low' ? 1.5 : 2);
+const view = { scale: 1 };
+renderer.setPixelRatio(BASE_RATIO);
 renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 renderer.shadowMap.autoUpdate = false;   // once per frame (frame()), not for every extra render
 renderer.toneMapping = params.get('tone') === 'agx' ? THREE.AgXToneMapping : THREE.ACESFilmicToneMapping;
 renderer.outputColorSpace = THREE.SRGBColorSpace;
+const ANISO = Math.min(16, renderer.capabilities.getMaxAnisotropy() || 1);
 
 const scene = new THREE.Scene();
 // The near plane follows the camera's distance from things (see frame()), so
@@ -89,6 +135,18 @@ const capSky = (s, max) => {
 };
 capSky(sky, 300);
 capSky(envSky, 20);
+// The environment is the sky at this hour plus the ground it lights, seen
+// from the middle of the land: shaded walls take the sky's blue from above
+// and the warm light bounced off sunlit earth and stone from below, and
+// metals and water reflect the real sky. envGain sets how much of the sky's
+// radiance reaches the shade (the sky model's units are not the sun's).
+envSky.material.uniforms.envGain = { value: 0.45 };
+envSky.material.fragmentShader = 'uniform float envGain;\n' + envSky.material.fragmentShader
+  .replace('gl_FragColor = vec4( min( retColor, vec3( 20.0 ) ), 1.0 );', 'gl_FragColor = vec4( min( retColor * envGain, vec3( 20.0 ) ), 1.0 );');
+const envGround = new THREE.Mesh(new THREE.CircleGeometry(48, 32), new THREE.MeshBasicMaterial({ color: 0x000000, side: THREE.DoubleSide, fog: false }));
+envGround.rotation.x = -Math.PI / 2;
+envGround.position.y = -1.2;
+envScene.add(envGround);
 for (const s of [sky, envSky]) {
   const u = s.material.uniforms;
   u.turbidity.value = 5.5;
@@ -99,14 +157,19 @@ for (const s of [sky, envSky]) {
 const pmrem = new THREE.PMREMGenerator(renderer);
 let envRT = null;
 
+// The sun casts two shadow maps: a wide one over everything in view, and a
+// tight one round the viewer, where people, steps and doorways need shadows
+// a few centimetres sharp. The second light gives no light of its own; the
+// shader (lights.js) takes its shadow near the viewer and blends to the wide
+// map toward its edge. Biases are set from each map's texel size (placeShadow).
 const sun = new THREE.DirectionalLight(0xfff0d8, 3);
 sun.castShadow = true;
-sun.shadow.mapSize.set(QUALITY === 'low' ? 2048 : 4096, QUALITY === 'low' ? 2048 : 4096);
-sun.shadow.bias = -0.0003;
-sun.shadow.normalBias = 0.5;
-sun.shadow.camera.near = 10;
-sun.shadow.camera.far = 4000;
+sun.shadow.mapSize.setScalar(QUALITY === 'low' ? 2048 : 4096);
 scene.add(sun, sun.target);
+const sunNear = new THREE.DirectionalLight(0xffffff, 0);
+sunNear.castShadow = QUALITY !== 'low';
+sunNear.shadow.mapSize.setScalar(2048);
+scene.add(sunNear, sunNear.target);
 const hemi = new THREE.HemisphereLight(0xc4d6ee, 0x8c6c4a, 0.6);
 scene.add(hemi);
 scene.fog = new THREE.FogExp2(0xcfd6dc, 6e-5);
@@ -138,7 +201,9 @@ function setTime(hours) {
   }
   // Twilight: the sky still lights the land for a while after sunset.
   const dusk = sm(sunDir.y, -0.22, 0.0) * (1 - sm(sunDir.y, 0.0, 0.2));
-  hemi.intensity = 0.1 + 0.47 * day + 0.35 * dusk;
+  // By day the environment (envSky, envGround) is the sky light; the
+  // hemisphere light is the fill of twilight and moonlit night.
+  hemi.intensity = 0.1 + 0.1 * day + 0.35 * dusk;
   hemi.color.setRGB(0.2, 0.26, 0.42).lerp(_c.setRGB(0.77, 0.84, 0.93), day);
   hemi.groundColor.setRGB(0.05, 0.05, 0.07).lerp(_c.setRGB(0.55, 0.42, 0.29), day);
   // At night the eye adapts: open the exposure and let the haze go blue-black.
@@ -161,6 +226,11 @@ function setTime(hours) {
     u.ambLow.value.setRGB(0.36, 0.32, 0.28).multiplyScalar(0.01 + 0.99 * day);
     u.hazeCol.value.copy(scene.fog.color);
   }
+  // Light bounced from the ground: sunlit earth and limestone, about 0.35 albedo.
+  const sunUp = Math.max(0, sunDir.y) * sun.intensity * (sunDir.y > -0.05 ? 1 : 0);
+  envGround.material.color.setRGB(0.62, 0.5, 0.38).multiplyScalar(0.35 * (sunUp + 0.5 * day) / Math.PI);
+  atmo.mist.value = sm(hours, 4.3, 5.6) * (1 - sm(hours, 6.4, 8.2));
+  atmo.dust.value = sm(hours, 11.5, 14.5) * (1 - sm(hours, 17.6, 19.2));
   // Re-light the environment only when the sky has visibly changed.
   if (Math.abs(hours - envHours) > 0.12) {
     envHours = hours;
@@ -173,16 +243,12 @@ function setTime(hours) {
   $('#time-out').textContent = `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
 }
 
-// Shadow frustum follows what you are looking at.
-function updateShadowFrustum(focus, dist) {
-  const ext = THREE.MathUtils.clamp(dist * 0.85, 40, 700);
-  const sc = sun.shadow.camera;
-  if (Math.abs(sc.right - ext) > ext * 0.15) {
-    sc.left = -ext; sc.right = ext; sc.top = ext; sc.bottom = -ext;
-    sc.updateProjectionMatrix();
-  }
-  sun.target.position.copy(focus);
-  sun.position.copy(focus).addScaledVector(lightDir, 1800);
+// Shadow frusta follow what you are looking at: the wide map over the view,
+// the tight one round the focus (the walker's feet when walking). Both are
+// snapped to whole texels so shadows do not shimmer as the camera moves.
+function updateShadowFrustum(focus, dist, near) {
+  placeShadow(sun, lightDir, focus, THREE.MathUtils.clamp(dist * 0.85, 60, 900));
+  if (sunNear.castShadow) placeShadow(sunNear, lightDir, near || focus, THREE.MathUtils.clamp(dist * 0.12, 16, 60));
 }
 
 // --- Screen effects: ambient occlusion, bloom, filmic tone mapping -------------------
@@ -199,50 +265,100 @@ const Sanitize = {
       gl_FragColor = bad ? vec4(0.0, 0.0, 0.0, 1.0) : vec4(min(c.rgb, vec3(48.0)), c.a);
     }`,
 };
-let composer = null, gtao = null, bloom = null;
+// A restrained grade, in linear light before tone mapping: a touch less
+// saturation in the darks, shadows a shade cooler and highlights a shade
+// warmer, as limestone looks in strong sun.
+const Grade = {
+  uniforms: { tDiffuse: { value: null } },
+  vertexShader: 'varying vec2 vUv; void main() { vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }',
+  fragmentShader: `uniform sampler2D tDiffuse; varying vec2 vUv;
+    void main() {
+      vec4 c = texture2D(tDiffuse, vUv);
+      float l = dot(c.rgb, vec3(0.2126, 0.7152, 0.0722));
+      vec3 g = mix(vec3(l), c.rgb, 0.9 + 0.1 * smoothstep(0.02, 0.4, l));
+      g *= mix(vec3(0.975, 0.99, 1.03), vec3(1.02, 1.0, 0.975), smoothstep(0.03, 0.6, l));
+      gl_FragColor = vec4(g, c.a);
+    }`,
+};
+let composer = null, gtao = null, bloom = null, smaa = null;
 function setupEffects() {
-  // Half-float, multisampled targets need WebGL 2 with float colour buffers.
-  if (FX === 'off' || !renderer.capabilities.isWebGL2 || !renderer.extensions.has('EXT_color_buffer_float')) return;
-  const w = canvas.clientWidth || innerWidth, h = canvas.clientHeight || innerHeight;
-  const rt = new THREE.WebGLRenderTarget(w, h, { type: THREE.HalfFloatType, samples: 4 });
-  composer = new EffectComposer(renderer, rt);
-  composer.addPass(new RenderPass(scene, camera));
-  composer.addPass(new ShaderPass(Sanitize));
-  gtao = new GTAOPass(scene, camera, w, h);
-  gtao.updateGtaoMaterial({ radius: 2.2, distanceExponent: 1.4, thickness: 2.5, scale: 1.1, samples: 16, distanceFallOff: 1, screenSpaceRadius: false });
-  gtao.updatePdMaterial({ lumaPhi: 10, depthPhi: 2, normalPhi: 3, radius: 6, radiusExponent: 1, rings: 2, samples: 16 });
-  gtao.blendIntensity = 0.85;
-  // Leave the sky, glass-like and glowing things out of the occlusion pass.
-  gtao.overrideVisibility = function () {
-    const cache = this._visibilityCache;
-    this.scene.traverse((o) => {
-      cache.set(o, o.visible);
-      if (o.isPoints || o.isLine || o.isSprite || o === sky || (o.material && !Array.isArray(o.material) && o.material.transparent)) o.visible = false;
-    });
-  };
-  composer.addPass(gtao);
-  // Only light well above sunlit stone blooms: the vision, fire, glints, the sun.
-  bloom = new UnrealBloomPass(new THREE.Vector2(w, h), 0.35, 0.45, 1.7);
-  composer.addPass(bloom);
-  composer.addPass(new OutputPass());
+  // Half-float targets need WebGL 2 and a colour-buffer-float extension
+  // (Safari exposes the half-float one); without them, render directly.
+  const halfOK = renderer.capabilities.isWebGL2 && (renderer.extensions.has('EXT_color_buffer_float') || renderer.extensions.has('EXT_color_buffer_half_float'));
+  if (FX === 'off' || !halfOK) return;
+  try {
+    const w = canvas.clientWidth || innerWidth, h = canvas.clientHeight || innerHeight;
+    // Multisampled where the browser allows it: thin parapets, ladders and
+    // grass stay smooth through the effects.
+    const samples = Math.min(4, renderer.capabilities.maxSamples || 0);
+    const rt = new THREE.WebGLRenderTarget(w, h, { type: THREE.HalfFloatType, samples });
+    composer = new EffectComposer(renderer, rt);
+    composer.addPass(new RenderPass(scene, camera));
+    composer.addPass(new ShaderPass(Sanitize));
+    gtao = new GTAOPass(scene, camera, w, h);
+    // Street scale: a short radius, so feet, jars and the foot of a wall
+    // darken the ground right where they touch it.
+    gtao.updateGtaoMaterial({ radius: 0.9, distanceExponent: 1.6, thickness: 1.2, scale: 1.0, samples: 16, distanceFallOff: 1, screenSpaceRadius: false });
+    gtao.updatePdMaterial({ lumaPhi: 10, depthPhi: 2, normalPhi: 3, radius: 4, radiusExponent: 1, rings: 2, samples: 16 });
+    gtao.blendIntensity = 0.8;
+    // Leave the sky, glass-like and glowing things out of the occlusion pass.
+    gtao.overrideVisibility = function () {
+      const cache = this._visibilityCache;
+      this.scene.traverse((o) => {
+        cache.set(o, o.visible);
+        if (o.isPoints || o.isLine || o.isSprite || o === sky || (o.material && !Array.isArray(o.material) && o.material.transparent)) o.visible = false;
+      });
+    };
+    composer.addPass(gtao);
+    // Only light well above sunlit stone blooms: the vision, fire, glints, the sun.
+    bloom = new UnrealBloomPass(new THREE.Vector2(w, h), 0.3, 0.45, 2.0);
+    composer.addPass(bloom);
+    composer.addPass(new ShaderPass(Grade));
+    composer.addPass(new OutputPass());
+    // Without multisampling, a morphological pass smooths edges instead.
+    if (!samples) { smaa = new SMAAPass(w * renderer.getPixelRatio(), h * renderer.getPixelRatio()); composer.addPass(smaa); }
+  } catch (err) {
+    console.warn('Screen effects could not start; rendering directly.', err);
+    composer = null;
+  }
 }
 
-// Drop the costliest effects if the median frame is slow.
-const governor = { skip: 45, samples: [], done: FX !== 'auto' };
+// The governor: watches the frame time and, when frames are slow, first
+// lowers the resolution (down to three quarters of a CSS pixel), then drops
+// the costliest effects one by one; when frames are quick again it raises the
+// resolution back. Effects once dropped stay off (no flickering back and forth).
+// It stays out of the way when the visitor set fx= explicitly.
+const governor = { skip: 60, samples: [], fast: 0, stage: 0, off: params.has('fx') };
+const MIN_RATIO = 0.75;
+function setScale(k) {
+  view.scale = THREE.MathUtils.clamp(k, MIN_RATIO / BASE_RATIO, 1);
+  renderer.setPixelRatio(BASE_RATIO * view.scale);
+  resize();
+}
+const STAGES = [
+  () => { if (gtao) gtao.enabled = false; },
+  () => { W.refl.enabled = false; },
+  () => { if (W.vclouds) { W.vclouds.scale = 0.34; resize(); } },
+  () => { if (sunNear.castShadow) { sunNear.castShadow = false; sunNear.shadow.map?.dispose(); sunNear.shadow.map = null; } },
+  () => { if (bloom) bloom.enabled = false; },
+  () => { composer = null; W.vis.baseGain = 1; setTime(sky24.hours); },
+];
 function govern(dt) {
-  if (governor.done || !composer) return;
+  if (governor.off) return;
   if (governor.skip > 0) { governor.skip--; return; }
   if (dt > 0.4) { governor.samples.length = 0; return; }   // tab hidden or a hitch
   governor.samples.push(dt);
-  if (governor.samples.length < 90) return;
-  const med = governor.samples.sort((a, b) => a - b)[45];
-  if (med > 1 / 28) {
-    gtao.enabled = false;
-    W.refl.enabled = false;
-    if (W.vclouds) { W.vclouds.scale = 0.34; resize(); }
-  }
-  if (med > 1 / 16) { composer = null; W.vis.baseGain = 1; setTime(sky24.hours); }
-  governor.done = true;
+  if (governor.samples.length < 60) return;
+  const med = governor.samples.sort((a, b) => a - b)[30];
+  governor.samples.length = 0;
+  if (med > 1 / 40) {                       // slower than 40 frames a second
+    governor.fast = 0;
+    governor.skip = 30;                     // let the change settle before judging again
+    if (view.scale * BASE_RATIO > MIN_RATIO + 0.01) setScale(view.scale * (med > 1 / 20 ? 0.7 : 0.85));
+    else if (governor.stage < STAGES.length) STAGES[governor.stage++]();
+  } else if (med < 1 / 55 && view.scale < 1) {
+    if (++governor.fast >= 3) { governor.fast = 0; setScale(view.scale * 1.12); }
+  } else governor.fast = 0;
 }
 
 // --- Build the world ------------------------------------------------------------
@@ -263,11 +379,13 @@ const details = [];
 async function build() {
   const step = async (txt, pct) => { $('#load-step').textContent = txt; $('#load-bar').style.width = pct + '%'; await tick(); };
   await step('Preparing stone, cedar and gold…', 6);
-  W.mats = makeMaterials();
-  installTerrainShader(W.mats.terrain);
+  W.mats = makeMaterials({ quality: QUALITY, anisotropy: ANISO });
+  installTerrainShader(W.mats.terrain, QUALITY);
   await step('Shaping the hills of Jerusalem…', 12);
   W.terrain = buildTerrain(W.mats, { seg: QUALITY === 'low' ? 520 : 680 });
   scene.add(W.terrain.group);
+  surfShared.sfGround.value = W.terrain.heightTex;
+  surfShared.sfGroundRect.value.copy(W.terrain.heightRect);
   await step('Laying out fields, threshing floors and roads…', 24);
   W.plan = planCountryside();
   overlays.late = paintOverlay('late', W.plan);
@@ -371,6 +489,7 @@ async function build() {
       details.push(d);
     } catch (e) {
       console.warn(`Detail module "${name}" left out: ${e.message}`);
+      report(`Module ${name} left out: ${e.message}`);
     }
     await tick();
   }
@@ -432,6 +551,7 @@ async function build() {
   for (const g of big) g.traverse((o) => { if (!o.isInstancedMesh) o.layers.enable(2); });
   W.probe.cam.children.forEach((c) => c.layers.set(2));
   await step('Lighting the lamps…', 96);
+  await texturesReady();
   patchScene(scene);
   setTime(parseFloat($('#time').value));
 }
@@ -524,6 +644,7 @@ function setOverlay(period) {
   const u = W.mats.terrain.userData.ov;
   u.ovColor.value = overlays[key].color;
   u.ovMask.value = overlays[key].mask;
+  u.ovField.value = overlays[key].field;
 }
 
 function applyVisibility() {
@@ -929,29 +1050,42 @@ canvas.addEventListener('pointerup', (e) => {
 // --- Camera: orbit, fly, walk -------------------------------------------------------
 // orbit: turn about a point (the default). fly: go anywhere, through walls,
 // from the ground to high above the hills. walk: first person at eye height,
-// stopped by walls but not by steps.
+// a body that is stopped by walls, climbs steps and falls off edges. The
+// movement itself is in walker.js.
 const keys = new Set();
-const walk = { yaw: 0, pitch: 0, vy: 0 };
-const fly = { speed: 1 };                // multiplier, set with the wheel
+const walk = { yaw: 0, pitch: 0, vy: 0 };   // where the eyes point, in walking and flying
+const fly = { speed: 1, v: new THREE.Vector3() };   // speed: multiplier, set with the wheel
 let panelsAuto = false;                  // panels hidden for flying or walking, to come back after
-const downRay = new THREE.Raycaster();
-const fwdRay = new THREE.Raycaster();
 const aimRay = new THREE.Raycaster();
-downRay.far = 60;
 const HINTS = {
   orbit: 'Drag to look around · right-drag to pan · scroll to zoom · click anything for its sources',
-  fly: 'W A S D to fly · E or Space up · Q or C down · drag to look · Shift faster · scroll for speed · Esc to stop',
-  walk: 'W A S D or arrows to walk · drag to look · Shift to run · Esc to stop',
+  fly: 'Mouse to look · W A S D to fly · E or Space up · Q or C down · Shift faster · scroll for speed · click for sources · Esc to free the mouse',
+  walk: 'Mouse to look · W A S D to walk · Shift to run · Space to jump · click for sources · Esc to free the mouse',
+  flyFree: 'Click to look with the mouse, or drag · W A S D to fly · E up · Q down · Shift faster · Esc to stop',
+  walkFree: 'Click to look with the mouse, or drag · W A S D to walk · Shift to run · Space to jump · Esc to stop',
+  flyDrag: 'Drag to look · W A S D to fly · E or Space up · Q or C down · Shift faster · scroll for speed · click for sources · Esc to stop',
+  walkDrag: 'Drag to look · W A S D or arrows to walk · Shift to run · Space to jump · click for sources · Esc to stop',
+  flyTouch: 'Left thumb to fly · drag to look · Up and Down buttons · tap for sources',
+  walkTouch: 'Left thumb to walk, further to go faster · drag to look · tap for sources',
 };
 
 const solidTargets = () => solids.filter(isShown);
 const heightAboveGround = () => camera.position.y - terrainY(camera.position.x, camera.position.z);
 
+// The walking body and the grid of solid meshes it collides with.
+const world = new CollisionWorld(() => solids, isShown);
+const body = new Body(world, (x, z) => terrainY(x, z));
+const head = new Head();
+const EYE_M = BODY.eye;
+const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)');
+const walkCost = { ms: 0, max: 0, frames: 0 };
+
+// The floor under (x, z): the highest surface below eye height, or the ground.
 function groundAt(x, z, eyeY) {
-  downRay.set(V(x, eyeY - 0.9, z), V(0, -1, 0));
-  const hits = downRay.intersectObjects(solidTargets(), false).filter((h) => !h.object.material.transparent);
-  const t = terrainY(x, z);
-  return hits.length ? Math.max(hits[0].point.y, t) : t;
+  world.sync();
+  const top = eyeY - 0.9;
+  world.gather(x - 0.4, terrainY(x, z) - 1, z - 0.4, x + 0.4, top, z + 0.4);
+  return body.ground(x, z, top);
 }
 
 // The first thing straight ahead of the camera: a building, or the ground.
@@ -977,7 +1111,41 @@ function lookFrom(dir) {
   walk.yaw = Math.atan2(dir.x, -dir.z);
   walk.pitch = Math.asin(THREE.MathUtils.clamp(dir.y, -1, 1));
 }
-const lookDir = () => V(Math.sin(walk.yaw) * Math.cos(walk.pitch), Math.sin(walk.pitch), -Math.cos(walk.yaw) * Math.cos(walk.pitch));
+const lookDir = (out = new THREE.Vector3()) => out.set(Math.sin(walk.yaw) * Math.cos(walk.pitch), Math.sin(walk.pitch), -Math.cos(walk.yaw) * Math.cos(walk.pitch));
+const faceView = () => camera.rotation.set(walk.pitch, -walk.yaw, 0, 'YXZ');
+
+// Running widens the view a little. resize() sets the field of view for the
+// screen: take whatever it set as the base, and add to that.
+const fovState = { base: 50, set: null };
+function addFov(add) {
+  if (fovState.set === null || Math.abs(camera.fov - fovState.set) > 1e-6) fovState.base = camera.fov;
+  const f = fovState.base + add;
+  if (Math.abs(f - camera.fov) > 1e-4) { camera.fov = f; camera.updateProjectionMatrix(); }
+  fovState.set = camera.fov;
+}
+
+// Mouse, touch and controller input for walking and flying.
+const pad = $('#walkpad');
+const look = new Controls({
+  canvas, pad, stick: $('#stick'), keys, look: walk,
+  active: () => state.cam !== 'orbit',
+  flying: () => state.flying,
+  pick: (x, y) => { if (W.ez) pick(x, y); },
+  onLock: () => showHint(),
+  onTouch: () => showHint(),
+});
+look.setTouch(coarse);
+
+function showHint() {
+  const m = state.cam;
+  let h = HINTS[m];
+  if (m !== 'orbit') {
+    if (look.touch) h = HINTS[m + 'Touch'];
+    else if (look.lockDenied) h = HINTS[m + 'Drag'];
+    else if (!look.locked) h = HINTS[m + 'Free'];
+  }
+  $('#hint').textContent = h;
+}
 
 function setCameraMode(mode) {
   const from = state.cam;
@@ -992,10 +1160,12 @@ function setCameraMode(mode) {
   $('#walk').setAttribute('aria-pressed', String(state.walking));
   $('#walk').textContent = state.walking ? 'Stop walking (Esc)' : 'Walk at ground level';
   controls.enabled = mode === 'orbit';
-  $('#hint').textContent = HINTS[mode];
   keys.clear();
-  look = null;
+  look.reset();
   walk.vy = 0;
+  fly.v.set(0, 0, 0);
+  head.reset();
+  if (from === 'walk') { addFov(0); fovState.set = null; }
   // Clear the screen to look around; the panels come back with the orbit.
   if (from === 'orbit') {
     closeSheets();
@@ -1004,6 +1174,8 @@ function setCameraMode(mode) {
   }
   if (mode === 'orbit' && panelsAuto) { panelsAuto = false; setPanelsHidden(false); }
   if (mode === 'orbit') {
+    look.unlock();
+    showHint();
     // Turn about whatever you were looking at.
     const d = camera.getWorldDirection(new THREE.Vector3());
     const p = aim(4000);
@@ -1015,32 +1187,31 @@ function setCameraMode(mode) {
     // Stand where you were looking: the centre of the orbit, or the ground ahead.
     let at = from === 'orbit' ? controls.target.clone() : heightAboveGround() < 6 ? camera.position.clone() : aim(3000);
     if (!at) at = camera.position.clone();
-    const g = groundAt(at.x, at.z, at.y + 2);
-    camera.position.set(at.x, g + 1.65, at.z);
+    world.sync();
+    body.place(at.x, at.z, at.y + 2);
+    camera.position.set(body.p.x, body.p.y + EYE_M, body.p.z);
     walk.pitch = 0;
   }
+  faceView();
+  look.lock();
+  showHint();
 }
 
 addEventListener('keydown', (e) => {
   if (e.target.closest?.('input, select, textarea') || e.altKey || e.ctrlKey || e.metaKey) return;
   if (state.cam === 'orbit') return;
-  if (e.key === 'Escape') { setCameraMode('orbit'); return; }
+  if (e.key === 'Escape') {
+    // The first Esc frees the mouse (the browser does that); the next one stops.
+    if (look.locked || performance.now() - look.unlockAt < 400) return;
+    setCameraMode('orbit');
+    return;
+  }
+  if (e.code === 'Space' && !e.repeat) look.jumpQ = true;
   keys.add(e.code);
   if (e.code.startsWith('Arrow') || e.code === 'Space' || e.code.startsWith('Page')) e.preventDefault();
 });
 addEventListener('keyup', (e) => keys.delete(e.code));
 addEventListener('blur', () => keys.clear());
-
-let look = null;
-canvas.addEventListener('pointerdown', (e) => { if (state.cam !== 'orbit') { look = { x: e.clientX, y: e.clientY }; canvas.setPointerCapture(e.pointerId); } });
-canvas.addEventListener('pointermove', (e) => {
-  if (state.cam === 'orbit' || !look) return;
-  const lim = state.flying ? 1.55 : 1.2;
-  walk.yaw += (e.clientX - look.x) * 0.0042;
-  walk.pitch = THREE.MathUtils.clamp(walk.pitch - (e.clientY - look.y) * 0.0042, -lim, lim);
-  look = { x: e.clientX, y: e.clientY };
-});
-canvas.addEventListener('pointerup', () => { look = null; });
 // In flight the wheel sets the speed.
 canvas.addEventListener('wheel', (e) => {
   if (!state.flying) return;
@@ -1049,62 +1220,70 @@ canvas.addEventListener('wheel', (e) => {
   $('#hint').textContent = `Speed ×${fly.speed < 1 ? fly.speed.toFixed(2) : fly.speed.toFixed(1)} · ` + HINTS.fly;
 }, { passive: false });
 
-const pad = $('#walkpad');
-if (coarse) pad.classList.add('touch');
-pad.querySelectorAll('button').forEach((b) => {
-  const code = { f: 'KeyW', b: 'KeyS', l: 'ArrowLeft', r: 'ArrowRight', u: 'KeyE', d: 'KeyQ' }[b.dataset.k];
-  b.addEventListener('pointerdown', (e) => { e.preventDefault(); keys.add(code); });
-  for (const ev of ['pointerup', 'pointerleave', 'pointercancel']) b.addEventListener(ev, () => keys.delete(code));
-});
-
-const held = (...codes) => codes.some((c) => keys.has(c));
-function turnAndAxes(dt) {
-  if (keys.has('ArrowLeft')) walk.yaw -= 1.6 * dt;
-  if (keys.has('ArrowRight')) walk.yaw += 1.6 * dt;
-  return {
-    f: (held('KeyW', 'ArrowUp') ? 1 : 0) - (held('KeyS', 'ArrowDown') ? 1 : 0),
-    s: (held('KeyD') ? 1 : 0) - (held('KeyA') ? 1 : 0),
-    fast: held('ShiftLeft', 'ShiftRight'),
-  };
-}
+const _fw = new THREE.Vector3(), _rt = new THREE.Vector3(), _dir = new THREE.Vector3();
+const walkIn = { x: 0, z: 0, run: false, jump: false };
 
 function stepWalk(dt) {
-  const { f, s, fast } = turnAndAxes(dt);
-  const speed = (fast ? 11 : 3.6) * dt;
-  const fw = V(Math.sin(walk.yaw), 0, -Math.cos(walk.yaw));
-  const rt = V(Math.cos(walk.yaw), 0, Math.sin(walk.yaw));
-  const move = fw.multiplyScalar(f).add(rt.multiplyScalar(s));
-  if (move.lengthSq() > 0) {
-    move.normalize();
-    // Walls stop you; steps (under knee height) do not.
-    fwdRay.set(V(camera.position.x, camera.position.y - 1.25, camera.position.z), move);
-    fwdRay.far = speed + 0.45;
-    const blocked = fwdRay.intersectObjects(solidTargets(), false).some((h) => !h.object.material.transparent);
-    if (!blocked) camera.position.addScaledVector(move, speed);
-  }
-  const g = groundAt(camera.position.x, camera.position.z, camera.position.y);
-  const want = g + 1.65;
-  if (camera.position.y > want + 0.05) { walk.vy -= 9.8 * dt; camera.position.y = Math.max(want, camera.position.y + walk.vy * dt); }
-  else { walk.vy = 0; camera.position.y += (want - camera.position.y) * Math.min(1, dt * 12); }
-  camera.lookAt(camera.position.clone().add(lookDir()));
+  const t0 = performance.now();
+  world.sync();
+  const i = look.read(dt);
+  const sy = Math.sin(walk.yaw), cy = Math.cos(walk.yaw);
+  walkIn.x = sy * i.f + cy * i.s;
+  walkIn.z = -cy * i.f + sy * i.s;
+  walkIn.run = i.run;
+  walkIn.jump = i.jump;
+  body.update(dt, walkIn);
+  const still = reducedMotion.matches;
+  const lift = head.update(dt, body, still);
+  camera.position.set(body.p.x + cy * head.sway, body.p.y + EYE_M + lift, body.p.z + sy * head.sway);
+  faceView();
+  addFov(head.fovAdd);
+  const ms = performance.now() - t0;
+  walkCost.ms += (ms - walkCost.ms) * 0.05;
+  walkCost.max = Math.max(walkCost.max * 0.995, ms);
+  walkCost.frames++;
 }
 
 // Flying: forward is where you look, so you climb or dive by looking up or
-// down. Speed grows with height, so the hills of Moab are as near as a lane.
+// down. Speed grows with height, so the hills of Moab are as near as a lane;
+// the pace eases in and out.
 function stepFly(dt) {
-  const { f, s, fast } = turnAndAxes(dt);
-  const u = (held('KeyE', 'Space', 'PageUp') ? 1 : 0) - (held('KeyQ', 'KeyC', 'PageDown') ? 1 : 0);
+  const i = look.read(dt);
   const h = Math.max(0, heightAboveGround());
-  const speed = THREE.MathUtils.clamp(5 + h * 0.6, 5, 1500) * fly.speed * (fast ? 4 : 1) * dt;
-  const rt = V(Math.cos(walk.yaw), 0, Math.sin(walk.yaw));
-  const move = lookDir().multiplyScalar(f).add(rt.multiplyScalar(s)).add(V(0, u, 0));
-  if (move.lengthSq() > 0) camera.position.addScaledVector(move.normalize(), speed);
-  const p = camera.position;
+  const speed = THREE.MathUtils.clamp(5 + h * 0.6, 5, 1500) * fly.speed * (i.run ? 4 : 1);
+  _rt.set(Math.cos(walk.yaw), 0, Math.sin(walk.yaw));
+  _dir.copy(lookDir(_fw)).multiplyScalar(i.f).addScaledVector(_rt, i.s);
+  _dir.y += i.u;
+  if (_dir.lengthSq() > 1) _dir.normalize();
+  flyStep(fly, dt, _dir, speed);
+  const p = camera.position.addScaledVector(fly.v, dt);
   p.x = THREE.MathUtils.clamp(p.x, -60000, 60000);
   p.z = THREE.MathUtils.clamp(p.z, -60000, 60000);
-  p.y = THREE.MathUtils.clamp(p.y, terrainY(p.x, p.z) + 0.6, 12000);
-  camera.lookAt(p.clone().add(lookDir()));
+  const floor = terrainY(p.x, p.z) + 0.6;
+  if (p.y < floor) { p.y = floor; if (fly.v.y < 0) fly.v.y = 0; }
+  p.y = Math.min(p.y, 12000);
+  faceView();
 }
+
+// For tests: step the body without rendering, and read what it costs.
+const walkerHandle = {
+  world, body, head, look, cost: walkCost,
+  // Stand at (x, z) on the highest floor under fromY (default: the highest of all).
+  put(x, z, fromY) { world.sync(); body.place(x, z, fromY); return body.p.toArray(); },
+  // n steps of 1/60 s with input { x, z, run, jump }, or a function of the step; positions every `every` steps.
+  sim(n, input, every = 0) {
+    world.sync();
+    const out = [];
+    for (let k = 0; k < n; k++) {
+      body.update(1 / 60, typeof input === 'function' ? input(k, body) : input);
+      if (every && k % every === 0) out.push(body.p.toArray().map((v) => +v.toFixed(2)));
+    }
+    return out;
+  },
+  setMode: (m) => setCameraMode(m),
+  step: (dt) => stepWalk(dt),
+};
+(function expose() { if (window.ezt) window.ezt.walker = walkerHandle; else requestAnimationFrame(expose); })();
 
 // --- UI wiring ------------------------------------------------------------------------
 document.querySelectorAll('.modes button').forEach((b) => b.addEventListener('click', () => setScene({ period: b.dataset.period })));
@@ -1271,8 +1450,16 @@ function frame() {
     setTime(hours);
     if (now - clockState.shown > 250) { $('#time').value = hours.toFixed(2); clockState.shown = now; }
   }
-  let focus = controls.target, span = camera.position.distanceTo(controls.target);
-  if (state.walking) { focus = camera.position; span = 120; }
+  let focus = controls.target, span = camera.position.distanceTo(controls.target), near = null;
+  if (state.walking) {
+    // The wide map reaches well ahead; the tight one is centred a little in
+    // front of the walker, where they look.
+    const d = camera.getWorldDirection(flyFocus).setY(0);
+    if (d.lengthSq() > 1e-6) d.normalize();
+    near = d.clone().multiplyScalar(8).add(camera.position);
+    focus = d.multiplyScalar(120).add(camera.position);
+    span = 260;
+  }
   else if (state.flying) {
     // Shadows and crowds where you are looking, on the ground ahead.
     const h = Math.max(1, heightAboveGround());
@@ -1282,7 +1469,7 @@ function frame() {
     focus.y = terrainY(focus.x, focus.z);
     span = THREE.MathUtils.clamp(h * 1.5, 60, 900);
   }
-  updateShadowFrustum(focus, span);
+  updateShadowFrustum(focus, span, near);
   waterShared.wTime.value = time;
   figureShared.pTime.value = time;
   W.vis.shared.time.value = time;
@@ -1313,8 +1500,14 @@ function frame() {
   W.vclouds?.render(camera);
   if (QUALITY !== 'low') updateProbe(now);
   renderer.shadowMap.needsUpdate = true;
-  if (composer) composer.render(dt);
-  else renderer.render(scene, camera);
+  if (composer) {
+    try { composer.render(dt); } catch (err) {
+      // A post chain the browser cannot run: fall back to direct rendering.
+      console.warn('Screen effects failed; rendering directly.', err);
+      composer = null; W.vis.baseGain = 1; setTime(sky24.hours);
+      renderer.render(scene, camera);
+    }
+  } else renderer.render(scene, camera);
   updateLabels();
   tour?.update(now, dt, canvas.clientWidth, canvas.clientHeight);
   requestAnimationFrame(frame);
@@ -1334,7 +1527,13 @@ document.querySelectorAll('.gfx button').forEach((b) => {
     if (u.href === location.href) location.reload(); else location.href = u.href;
   });
 });
-$('#gfx-now').textContent = `Now: ${QUALITY === 'low' ? 'low' : 'high'}${CHOICE ? '' : ' (chosen for this device)'}`;
+const gpuName = (() => {
+  try {
+    const gl = renderer.getContext(), ext = gl.getExtension('WEBGL_debug_renderer_info');
+    return String(gl.getParameter(ext ? ext.UNMASKED_RENDERER_WEBGL : gl.RENDERER) || '').replace(/^ANGLE \((.*)\)$/, '$1').slice(0, 48);
+  } catch { return ''; }
+})();
+$('#gfx-now').textContent = `Now: ${QUALITY === 'low' ? 'low' : 'high'}${CHOICE ? '' : ' (chosen for this device)'}${gpuName ? ' · ' + gpuName : ''}`;
 // If full graphics cannot start on this device, fall back to low once.
 const fallBack = (why) => {
   if (QUALITY === 'low' || stored('ezt-graphics-failed')) return false;
@@ -1371,7 +1570,7 @@ build().then(() => {
   // ?tour=N opens the tour at stop N.
   if (params.has('tour')) tour.start(Math.max(0, (parseInt(params.get('tour'), 10) || 1) - 1));
   $('#loading').classList.add('done');
-  window.ezt = { scene, camera, controls, renderer, W, details, state, tour, setScene, setTime, flyTo, select, viewSections, setRunning, clockState, sky24, terrainY, get composer() { return composer; }, get gtao() { return gtao; }, get bloom() { return bloom; } };
+  window.ezt = { scene, camera, controls, renderer, W, details, atmo, sun, hemi, state, tour, setScene, setTime, flyTo, select, viewSections, setRunning, clockState, sky24, terrainY, get composer() { return composer; }, get gtao() { return gtao; }, get bloom() { return bloom; } };
   frame();
 }).catch((err) => {
   console.error(err);

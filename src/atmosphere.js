@@ -7,6 +7,8 @@ export const atmo = {
   fogSunDir: { value: new THREE.Vector3(0, 1, 0) },
   fogSunColor: { value: new THREE.Color(1, 0.9, 0.75) },
   fogFalloff: { value: 1 / 700 },     // 1 / scale height in metres
+  mist: { value: 0 },                 // morning mist lying in the valleys (0-1)
+  dust: { value: 0 },                 // afternoon dust haze (0-1)
 };
 
 THREE.ShaderChunk.fog_pars_vertex = /* glsl */ `
@@ -39,6 +41,8 @@ THREE.ShaderChunk.fog_pars_fragment = /* glsl */ `
   uniform vec3 fogSunDir;
   uniform vec3 fogSunColor;
   uniform float fogFalloff;
+  uniform float mist;
+  uniform float dust;
 #endif`;
 
 THREE.ShaderChunk.fog_fragment = /* glsl */ `
@@ -52,9 +56,21 @@ THREE.ShaderChunk.fog_fragment = /* glsl */ `
     float fogLine = abs( fogRay.y ) > 0.5
       ? ( exp( - fogK * fogH0 ) - exp( - fogK * ( fogH0 + fogRay.y ) ) ) / ( fogK * fogRay.y )
       : exp( - fogK * fogH0 );
-    float fogFactor = 1.0 - exp( - fogDensity * fogDist * fogLine );
+    float fogFactor = 1.0 - exp( - fogDensity * ( 1.0 + 0.7 * dust ) * fogDist * fogLine );
     float fogSun = pow( max( dot( fogRay / max( fogDist, 1e-3 ), fogSunDir ), 0.0 ), 6.0 );
     vec3 fogCol = mix( fogColor, fogSunColor, fogSun * 0.75 );
+    // Afternoon dust: warmer, a little thicker.
+    fogCol = mix( fogCol, vec3( 0.80, 0.70, 0.56 ) * dot( fogColor, vec3( 0.33 ) ) * 1.25, 0.35 * dust );
+    // Morning mist: a thin layer lying in the Kidron and Hinnom (below about
+    // 640 m above sea level), integrated along the ray like the haze.
+    if ( mist > 0.001 ) {
+      const float mk = 1.0 / 18.0, mBase = 30.0;
+      float m0 = exp( - mk * ( fogH0 - mBase ) );
+      float mLine = abs( fogRay.y ) > 0.5 ? ( m0 - exp( - mk * ( fogH0 + fogRay.y - mBase ) ) ) / ( mk * fogRay.y ) : m0;
+      float mistF = 1.0 - exp( - mist * 0.005 * min( fogDist, 3000.0 ) * min( mLine, 4.0 ) );
+      vec3 mistCol = mix( fogColor * 1.1, fogSunColor * 1.2, 0.35 + 0.4 * fogSun );
+      gl_FragColor.rgb = mix( gl_FragColor.rgb, mistCol, mistF * 0.85 );
+    }
   #else
     float fogFactor = smoothstep( fogNear, fogFar, vFogDepth );
     vec3 fogCol = fogColor;

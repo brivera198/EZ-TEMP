@@ -120,100 +120,403 @@ export function planCountryside() {
   return { fields, floors, towers, folds };
 }
 
+// --- Surface atlas for wood, pottery, cloth and stone ---------------------------------
+// One canvas holds four 1-metre-ish tiles of surface detail in grey (oak-
+// and pine-like planks with grain, knots and gaps; fired clay with throwing
+// rings and grit; an over-and-under weave; pitted limestone), with a normal
+// map, so that one material tinted by vertex and instance colour serves the
+// door leaves, beams, jars, baskets, awnings and troughs of the whole city
+// in a handful of draw calls. Each part's UVs are projected in metres onto
+// its tile (atlasUV).
+export const TILE = { wood: [0, 0.5], clay: [0.5, 0.5], weave: [0, 0], stone: [0.5, 0] };
+const vnoise = (x, y, seed) => {
+  const xi = Math.floor(x), yi = Math.floor(y), fx = x - xi, fy = y - yi;
+  const h = (i, j) => hash1(Math.imul(i, 374761) + Math.imul(j, 668265) + seed * 69069);
+  const sx = fx * fx * (3 - 2 * fx), sy = fy * fy * (3 - 2 * fy);
+  const a = h(xi, yi) + (h(xi + 1, yi) - h(xi, yi)) * sx, b = h(xi, yi + 1) + (h(xi + 1, yi + 1) - h(xi, yi + 1)) * sx;
+  return a + (b - a) * sy;
+};
+
+function surfaceTexel(tile, x, y) {
+  if (tile === 0) {                                     // planks, running up the tile
+    const p = Math.floor(x / 128), lx = x % 128;
+    if (lx < 3 || lx > 125) return [0.32, -1];
+    const tone = 0.78 + 0.18 * hash1(p * 13 + 1);
+    const warp = 7 * vnoise(x / 40, y / 160, p) + 3 * vnoise(x / 9, y / 70, p + 9);
+    const grain = 0.5 + 0.5 * Math.sin((x + warp) * 1.15);
+    const streak = vnoise(x / 5, y / 140, p + 3);
+    let lum = tone * (0.8 + 0.12 * grain + 0.1 * streak), hgt = 0.25 * grain + 0.2 * streak;
+    for (let k = 0; k < 2; k++) {                         // a knot or two in each board
+      const kx = p * 128 + 30 + 68 * hash1(p * 7 + k), ky = 60 + 390 * hash1(p * 11 + k * 5);
+      const d = Math.hypot((x - kx) * 1.4, (y - ky) * 0.6);
+      if (d < 16) { lum *= 0.55 + 0.25 * Math.sin(d * 1.2) * (d / 16); hgt -= 0.5 * (1 - d / 16); }
+    }
+    if (y % 256 < 2) return [lum * 0.5, -0.8];            // board ends
+    return [lum, hgt];
+  }
+  if (tile === 1) {                                     // fired clay
+    const ring = Math.sin(y * 0.42 + 4 * vnoise(x / 60, y / 12, 21));
+    let lum = 0.84 + 0.1 * (vnoise(x / 30, y / 30, 22) - 0.5) + 0.06 * (vnoise(x / 6, y / 6, 23) - 0.5) + 0.035 * ring;
+    const grit = hash1(x * 977 + y * 131);
+    if (grit < 0.006) lum *= 0.75; else if (grit > 0.995) lum *= 1.12;
+    if (y > 420) lum *= 1 - 0.35 * ((y - 420) / 92) * vnoise(x / 25, y / 25, 24);   // fire-clouding low down
+    return [lum, 0.35 * ring + 0.2 * vnoise(x / 6, y / 6, 23)];
+  }
+  if (tile === 2) {                                     // weave
+    const ix = Math.floor(x / 16), iy = Math.floor(y / 16), over = (ix + iy) % 2;
+    const t = over ? (y % 16) / 16 : (x % 16) / 16;
+    const sh = Math.sin(Math.PI * t);
+    const lum = (0.62 + 0.36 * sh) * (0.9 + 0.12 * vnoise(x / 7, y / 7, 31)) * (0.94 + 0.08 * hash1(ix * 7 + iy * 3));
+    return [lum, sh];
+  }
+  // limestone, dressed but pitted
+  let lum = 0.84 + 0.12 * (vnoise(x / 45, y / 45, 41) - 0.5) + 0.08 * (vnoise(x / 8, y / 8, 42) - 0.5), hgt = 0.3 * vnoise(x / 8, y / 8, 42);
+  for (const [c, pr, r] of [[7, 0.12, 2.2], [26, 0.15, 6]]) {
+    const cx = Math.floor(x / c), cy = Math.floor(y / c);
+    if (hash1(cx * 191 + cy * 7 + c) < pr) {
+      const px = (cx + 0.5) * c, py = (cy + 0.5) * c, d = Math.hypot(x - px, y - py) / r;
+      if (d < 1) { lum *= 0.62 + 0.38 * d; hgt -= 0.8 * (1 - d); }
+    }
+  }
+  return [lum, hgt];
+}
+
+let ATLAS = null;
+export function propAtlas() {
+  if (ATLAS) return ATLAS;
+  const N = 1024;
+  const cnv = document.createElement('canvas'), nrm = document.createElement('canvas');
+  cnv.width = cnv.height = nrm.width = nrm.height = N;
+  const ci = cnv.getContext('2d').createImageData(N, N), ni = nrm.getContext('2d').createImageData(N, N);
+  const h = new Float32Array(N * N);
+  for (let y = 0; y < N; y++) for (let x = 0; x < N; x++) {
+    const tile = (y >= 512 ? 2 : 0) + (x >= 512 ? 1 : 0);
+    const [l, hg] = surfaceTexel(tile, x % 512, y % 512);
+    const v = Math.max(0, Math.min(255, l * 255)), k = (y * N + x) * 4;
+    ci.data[k] = ci.data[k + 1] = ci.data[k + 2] = v; ci.data[k + 3] = 255;
+    h[y * N + x] = hg;
+  }
+  for (let y = 0; y < N; y++) for (let x = 0; x < N; x++) {
+    const hx = h[y * N + Math.min(N - 1, x + 1)] - h[y * N + Math.max(0, x - 1)];
+    const hy = h[Math.min(N - 1, y + 1) * N + x] - h[Math.max(0, y - 1) * N + x];
+    const nx = -hx * 2.5, ny = hy * 2.5, l = Math.hypot(nx, ny, 1), k = (y * N + x) * 4;
+    ni.data[k] = (nx / l * 0.5 + 0.5) * 255; ni.data[k + 1] = (ny / l * 0.5 + 0.5) * 255; ni.data[k + 2] = (1 / l * 0.5 + 0.5) * 255; ni.data[k + 3] = 255;
+  }
+  cnv.getContext('2d').putImageData(ci, 0, 0);
+  nrm.getContext('2d').putImageData(ni, 0, 0);
+  const map = new THREE.CanvasTexture(cnv), normalMap = new THREE.CanvasTexture(nrm);
+  map.colorSpace = THREE.SRGBColorSpace;
+  for (const t of [map, normalMap]) t.anisotropy = 4;
+  ATLAS = new THREE.MeshStandardMaterial({ map, normalMap, normalScale: new THREE.Vector2(0.9, 0.9), vertexColors: true, roughness: 0.86, metalness: 0 });
+  ATLAS.envMapIntensity = 0.15;
+  return ATLAS;
+}
+
+// Project a part's UVs onto one atlas tile, in metres (after scaling by
+// sx, sy, sz), one `size` metres to the tile; the long side of a part runs
+// up the tile, so planks and grain follow boards, rails and beams.
+export function atlasUV(g, tile, size = 1, sx = 1, sy = 1, sz = 1) {
+  const p = g.attributes.position, n = p.count, S = [sx, sy, sz];
+  const lo = [Infinity, Infinity, Infinity], hi = [-Infinity, -Infinity, -Infinity];
+  const P = (i, a) => (a === 0 ? p.getX(i) : a === 1 ? p.getY(i) : p.getZ(i)) * S[a];
+  for (let i = 0; i < n; i++) for (let a = 0; a < 3; a++) { const v = P(i, a); lo[a] = Math.min(lo[a], v); hi[a] = Math.max(hi[a], v); }
+  const ext = [hi[0] - lo[0], hi[1] - lo[1], hi[2] - lo[2]];
+  const [tu, tv] = TILE[tile], m = 0.012, span = 0.5 - 2 * m;
+  const uv = new Float32Array(n * 2);
+  for (let t = 0; t + 2 < n; t += 3) {
+    const e1 = [0, 1, 2].map((a) => P(t + 1, a) - P(t, a)), e2 = [0, 1, 2].map((a) => P(t + 2, a) - P(t, a));
+    const nn = [Math.abs(e1[1] * e2[2] - e1[2] * e2[1]), Math.abs(e1[2] * e2[0] - e1[0] * e2[2]), Math.abs(e1[0] * e2[1] - e1[1] * e2[0])];
+    const ax = nn[0] >= nn[1] && nn[0] >= nn[2] ? 0 : nn[1] >= nn[2] ? 1 : 2;
+    let [a, b] = ax === 0 ? [2, 1] : ax === 1 ? [0, 2] : [0, 1];
+    if (ext[a] > ext[b]) [a, b] = [b, a];
+    const sc = Math.max(size, ext[a], ext[b]);
+    for (let k = 0; k < 3; k++) {
+      uv[(t + k) * 2] = tu + m + span * (P(t + k, a) - lo[a]) / sc;
+      uv[(t + k) * 2 + 1] = tv + m + span * (P(t + k, b) - lo[b]) / sc;
+    }
+  }
+  g.setAttribute('uv', new THREE.BufferAttribute(uv, 2));
+  return g;
+}
+
 // --- House models -----------------------------------------------------------------
 // Unit models: x across the front (-0.5..0.5), z from back (-0.5) to front
-// (+0.5, facing downhill), y from floor (0) to roof (1).
-const WALL = [1, 1, 1], ROOF = [0.80, 0.72, 0.60], PILLAR = [0.78, 0.73, 0.66];
-const OVEN = [0.42, 0.31, 0.24], DARK = [0.22, 0.17, 0.13], RUBBLE = [0.62, 0.57, 0.50], CHAR = [0.16, 0.13, 0.11];
+// (+0.5, facing downhill), y from floor (0) to roof (1). Instancing stretches
+// them to each house's footprint and wall height, so every triangle here is
+// drawn some 2,600 times: faces that can never be seen are left out. Each
+// house is two meshes: plastered walls and roofs (mats.house), and the
+// wood and stone trim (doors, beams, lintels, pillars, ladders) on the
+// surface atlas, its UVs laid out for a house of about 9 × 10.5 m, 4 m high.
+const WALL = [1, 1, 1], ROOF = [0.80, 0.72, 0.60];
+const OVEN = [0.42, 0.31, 0.24], DARK = [0.22, 0.17, 0.13], RUBBLE = [0.62, 0.57, 0.50];
+const DADO = [0.80, 0.73, 0.62], SOOT = [0.34, 0.29, 0.26], ASH = [0.50, 0.47, 0.44], EARTH = [0.58, 0.49, 0.39];
+const LIN = (c) => c.map((v) => Math.pow(v, 2.2));
+const T_DOOR = LIN([0.66, 0.48, 0.32]), T_BEAM = LIN([0.6, 0.46, 0.33]), T_STONE = LIN([0.95, 0.91, 0.82]), T_SILL = LIN([0.85, 0.81, 0.74]);
+const T_PILLAR = LIN([0.93, 0.88, 0.8]), T_CHAR = LIN([0.2, 0.17, 0.15]), T_CLAY = LIN([0.78, 0.56, 0.42]), T_TROUGH = LIN([0.6, 0.56, 0.5]);
+const REF = [9, 4, 10.5];
+
+// Box with some faces left out: `skip` names them (R +x, L -x, T top,
+// B bottom, F front +z, K back -z). A box skipping five faces is a quad.
+const FACES = 'RLTBFK';
+function hbox(x0, x1, y0, y1, z0, z1, col, skip = '') {
+  const g = new THREE.BoxGeometry(x1 - x0, y1 - y0, z1 - z0).toNonIndexed();
+  g.translate((x0 + x1) / 2, (y0 + y1) / 2, (z0 + z1) / 2);
+  if (skip) {
+    const keep = [];
+    for (let f = 0; f < 6; f++) if (!skip.includes(FACES[f])) keep.push(f);
+    for (const name of ['position', 'normal', 'uv']) {
+      const a = g.attributes[name], n = a.itemSize, out = new Float32Array(keep.length * 6 * n);
+      keep.forEach((f, k) => out.set(a.array.subarray(f * 6 * n, (f + 1) * 6 * n), k * 6 * n));
+      g.setAttribute(name, new THREE.BufferAttribute(out, n));
+    }
+  }
+  return paint(g, col);
+}
+// The same, for the trim, with atlas UVs.
+const tbox = (tile, ...a) => atlasUV(hbox(...a), tile, tile === 'wood' ? 1.2 : 1, ...REF);
+
+// Mirror left for right, keeping the triangles facing outward.
+function mirrorX(g) {
+  g.scale(-1, 1, 1);
+  for (const a of Object.values(g.attributes)) {
+    const n = a.itemSize, arr = a.array;
+    for (let t = 0; t < a.count; t += 3) {
+      for (let k = 0; k < n; k++) {
+        const i1 = (t + 1) * n + k, i2 = (t + 2) * n + k;
+        const v = arr[i1]; arr[i1] = arr[i2]; arr[i2] = v;
+      }
+    }
+  }
+  return g;
+}
+const mirrorHouse = (h) => ({ main: mirrorX(h.main), trim: mirrorX(h.trim) });
+
+// A wooden door leaf of vertical boards, hinged at (hx, z) on the inside
+// face of a wall and swung inward by `ang`, its free edge toward -x.
+function doorLeaf(hx, z, w, h, ang) {
+  const g = new THREE.BoxGeometry(w, h, 0.008).toNonIndexed();
+  g.translate(-w / 2, h / 2, -0.004);
+  atlasUV(g, 'wood', 1.2, ...REF);
+  g.rotateY(-ang);
+  g.translate(hx, 0.004, z);
+  return paint(g, T_DOOR);
+}
+
+// Smoke-blackened toward the broken tops, as the walls of the burned houses were.
+function soot(g, k) {
+  const p = g.attributes.position, c = g.attributes.color;
+  for (let i = 0; i < p.count; i++) {
+    const t = k * Math.min(1, Math.max(0, p.getY(i) / 0.55));
+    c.setXYZ(i, WALL[0] + (SOOT[0] - WALL[0]) * t, WALL[1] + (SOOT[1] - WALL[1]) * t, WALL[2] + (SOOT[2] - WALL[2]) * t);
+  }
+  return g;
+}
 
 function parapets(p, y, rects) {
-  for (const [x0, x1, z0, z1] of rects) p.push(cbox(x0, x1, y, y + 0.17, z0, z1, WALL));
+  for (const [x0, x1, z0, z1] of rects) p.push(hbox(x0, x1, y, y + 0.17, z0, z1, WALL, 'B'));
 }
+
+// Doorway in a front wall whose outer face is at z: stone lintel and
+// threshold. The door leaf goes in separately.
+function doorway(t, w, h, z, depth) {
+  t.push(tbox('stone', -w / 2 - 0.025, w / 2 + 0.025, h, h + 0.045, z - depth, z + 0.012, T_STONE, 'K'));
+  t.push(tbox('stone', -w / 2, w / 2, 0, 0.02, z - depth, z + 0.012, T_SILL, 'BK'));
+}
+
+// Ends of the roof beams showing through a wall face at z (dir +1 facing
+// +z, -1 facing -z), just under the roof.
+function beamEnds(t, xs, y, z, dir, col = T_BEAM) {
+  for (const x of xs) {
+    const z0 = dir > 0 ? z : z - 0.022, z1 = dir > 0 ? z + 0.022 : z;
+    t.push(tbox('wood', x - 0.011, x + 0.011, y, y + 0.04, z0, z1, col, dir > 0 ? 'KT' : 'FT'));
+  }
+}
+
+// Window slits high in a wall: dark quads that glow when a lamp is lit.
+function slits(p, xs, y0, y1, z, dir) {
+  for (const x of xs) p.push(hbox(x - 0.014, x + 0.014, y0, y1, dir > 0 ? z : z - 0.0005, dir > 0 ? z + 0.0005 : z, DARK, dir > 0 ? 'RLTBK' : 'RLTBF'));
+}
+
+function clayOven(t, rTop, rBot, h, x, z, seg) {
+  const o = new THREE.CylinderGeometry(rTop, rBot, h, seg).toNonIndexed();
+  o.translate(x, h / 2, z);
+  t.push(paint(atlasUV(o, 'clay', 1, ...REF), T_CLAY));
+}
+
+const finish = (p, t) => ({ main: mergeParts(p), trim: mergeParts(t) });
 
 // The four-room (pillared) house: three long rooms and a broad room round a
 // courtyard; flat roofs with a parapet (Deut 22:8); optional upper room.
+// A stone stair in the courtyard climbs to the roof on the +x side; the
+// mirrored variant has it on the other side (see houseVariant).
 function fourRoomHouse(upper) {
-  const p = [];
-  const tx = 0.06, tz = 0.05;
-  p.push(cbox(-0.5, 0.5, 0, 1, -0.5, -0.5 + tz, WALL));
-  p.push(cbox(-0.5, -0.5 + tx, 0, 1, -0.5 + tz, 0.5, WALL));
-  p.push(cbox(0.5 - tx, 0.5, 0, 1, -0.5 + tz, 0.5, WALL));
-  p.push(cbox(-0.5 + tx, -0.09, 0, 1, 0.5 - tz, 0.5, WALL));
-  p.push(cbox(0.09, 0.5 - tx, 0, 1, 0.5 - tz, 0.5, WALL));
-  p.push(cbox(-0.09, 0.09, 0.7, 1, 0.5 - tz, 0.5, WALL));
-  p.push(cbox(-0.5 + tx, -0.07, 0, 1, -0.22, -0.18, WALL));        // broad room
-  p.push(cbox(0.07, 0.5 - tx, 0, 1, -0.22, -0.18, WALL));
-  p.push(cbox(-0.07, 0.07, 0.68, 1, -0.22, -0.18, WALL));
-  for (const s of [-1, 1]) for (const z of [-0.06, 0.14, 0.34]) {  // pillars between courtyard and side rooms
-    p.push(cbox(s * 0.2 - 0.025, s * 0.2 + 0.025, 0, 0.94, z - 0.025, z + 0.025, PILLAR));
+  const p = [], t = [];
+  const b = (...a) => p.push(hbox(...a));
+  const tw = (...a) => t.push(tbox('wood', ...a)), ts = (...a) => t.push(tbox('stone', ...a));
+  const tx = 0.06, tz = 0.05, dw = 0.065, dh = 0.5, zf = 0.5 - tz;
+  b(-0.5, 0.5, 0, 1, -0.5, -0.5 + tz, WALL, 'B');
+  b(-0.5, -0.5 + tx, 0, 1, -0.5 + tz, 0.5, WALL, 'B');
+  b(0.5 - tx, 0.5, 0, 1, -0.5 + tz, 0.5, WALL, 'B');
+  b(-0.5 + tx, -dw, 0, 1, zf, 0.5, WALL, 'B');
+  b(dw, 0.5 - tx, 0, 1, zf, 0.5, WALL, 'B');
+  b(-dw, dw, dh, 1, zf, 0.5, WALL, 'B');
+  b(-0.5 + tx, -0.05, 0, 1, -0.22, -0.18, WALL, 'B');            // broad room
+  b(0.05, 0.5 - tx, 0, 1, -0.22, -0.18, WALL, 'B');
+  b(-0.05, 0.05, 0.5, 1, -0.22, -0.18, WALL, 'B');
+  b(-0.05, 0.05, 0, 0.5, -0.2, -0.1995, DARK, 'RLTBK');
+  for (const s of [-1, 1]) for (const z of [-0.06, 0.14, 0.34]) {  // stone pillars between courtyard and side rooms
+    ts(s * 0.2 - 0.025, s * 0.2 + 0.025, 0, 0.94, z - 0.025, z + 0.025, T_PILLAR, 'TB');
   }
-  p.push(cbox(-0.5, 0.5, 0.94, 1, -0.5, -0.18, ROOF));
-  p.push(cbox(-0.5, -0.18, 0.94, 1, -0.18, 0.5, ROOF));
-  p.push(cbox(0.18, 0.5, 0.94, 1, -0.18, 0.5, ROOF));
+  b(-0.5, 0.5, 0.94, 1, -0.5, -0.18, ROOF, 'B');
+  b(-0.5, -0.18, 0.94, 1, -0.18, 0.5, ROOF, 'B');
+  b(0.18, 0.5, 0.94, 1, -0.18, 0.5, ROOF, 'B');
   parapets(p, 1, [
     [-0.5, 0.5, -0.5, -0.47], [-0.5, -0.47, -0.47, 0.5], [0.47, 0.5, -0.47, 0.5],
     [-0.47, -0.18, 0.47, 0.5], [0.18, 0.47, 0.47, 0.5],
     [-0.21, -0.18, -0.18, 0.47], [0.18, 0.21, -0.18, 0.47], [-0.18, 0.18, -0.21, -0.18],
   ]);
-  const oven = new THREE.CylinderGeometry(0.03, 0.045, 0.12, 8).toNonIndexed();   // clay oven (tannur)
-  oven.translate(0.09, 0.06, 0.3);
-  p.push(paint(oven, OVEN));
-  for (const s of [-1, 1]) p.push(cbox(s * 0.38 - 0.04, s * 0.38 + 0.04, 0.58, 0.7, 0.5, 0.506, DARK));   // window slits
+  // Doorway onto the courtyard, its leaf standing open.
+  doorway(t, 2 * dw, dh, 0.5, tz + 0.004);
+  t.push(doorLeaf(dw, zf, 2 * dw - 0.005, dh - 0.02, 1.2));
+  b(-0.5, -dw - 0.025, 0, 0.09, 0.5, 0.5008, DADO, 'RLTBK');       // splashed plaster at the foot of the wall
+  b(dw + 0.025, 0.5, 0, 0.09, 0.5, 0.5008, DADO, 'RLTBK');
+  slits(p, [-0.3, 0.3], 0.64, 0.74, 0.5, 1);
+  slits(p, [-0.25, 0.25], 0.62, 0.72, -0.5, -1);
+  beamEnds(t, [-0.38, -0.19, 0, 0.19, 0.38], 0.895, -0.5, -1);     // broad-room beams, through the back wall
+  beamEnds(t, [-0.13, 0.08], 0.895, -0.18, 1);                      // and over the courtyard
+  tw(0.33, 0.35, 0.93, 0.95, 0.5, 0.56, T_BEAM, 'K');               // wooden roof drain spout
+  for (let k = 0; k < 5; k++) b(0.1, 0.175, 0, (k + 1) * 0.19, -0.18, 0.12 - k * 0.06, ROOF, 'BRK');   // stair to the roof
+  clayOven(t, 0.03, 0.045, 0.12, 0.125, 0.3, 8);                    // clay oven (tannur)
+  ts(-0.225, -0.175, 0, 0.1, 0.17, 0.31, T_TROUGH, 'B');            // stone manger between the pillars
+  ts(-0.218, -0.182, 0.1, 0.1012, 0.18, 0.3, LIN([0.3, 0.27, 0.24]), 'RLBFK');
   if (upper) {                                          // upper room on the roof (2 Kgs 4:10)
-    p.push(cbox(-0.44, 0.06, 1, 1.62, -0.47, -0.21, WALL));
-    p.push(cbox(-0.46, 0.08, 1.62, 1.68, -0.49, -0.19, ROOF));
-    p.push(cbox(-0.12, -0.02, 1, 1.45, -0.215, -0.205, DARK));
+    b(-0.44, 0.06, 1, 1.62, -0.47, -0.21, WALL, 'B');
+    b(-0.46, 0.08, 1.62, 1.68, -0.49, -0.19, ROOF, 'B');
+    b(-0.12, -0.03, 1, 1.42, -0.21, -0.2095, DARK, 'RLTBK');
+    ts(-0.135, -0.015, 1.42, 1.46, -0.215, -0.198, T_STONE, 'K');
+    slits(p, [-0.32], 1.38, 1.47, -0.21, 1);
+    beamEnds(t, [-0.38, -0.22, -0.06], 1.56, -0.21, 1);
   }
-  return mergeParts(p);
+  return finish(p, t);
 }
 
-// Smaller broad-room house with a walled yard.
+// Smaller broad-room house with a walled yard: a ladder to the roof, an
+// oven in the yard, the door into the room standing open.
 function broadRoomHouse() {
-  const p = [];
-  p.push(cbox(-0.5, 0.5, 0, 1, -0.5, -0.02, WALL));
-  p.push(cbox(-0.48, 0.48, 1, 1.03, -0.48, -0.04, ROOF));
+  const p = [], t = [];
+  const b = (...a) => p.push(hbox(...a));
+  const zf = -0.02, tz = 0.05, dw = 0.055, dh = 0.55;
+  b(-0.5, 0.5, 0, 1, -0.5, zf, WALL, 'BTF');
+  b(-0.5, -dw, 0, 1, zf - tz, zf, WALL, 'B');
+  b(dw, 0.5, 0, 1, zf - tz, zf, WALL, 'B');
+  b(-dw, dw, dh, 1, zf - tz, zf, WALL, 'B');
+  // The dark room behind the door (it glows when a lamp is lit).
+  b(-0.46, 0.46, 0, 0.98, -0.461, -0.46, DARK, 'RLTBK');
+  b(-0.461, -0.46, 0, 0.98, -0.46, zf - tz, DARK, 'LTBFK');
+  b(0.46, 0.461, 0, 0.98, -0.46, zf - tz, DARK, 'RTBFK');
+  b(-0.46, 0.46, 0.98, 0.981, -0.46, zf - tz, DARK, 'RLTFK');
+  b(-0.5, 0.5, 1, 1.03, -0.5, zf, ROOF, 'B');
   parapets(p, 1.03, [[-0.5, 0.5, -0.5, -0.47], [-0.5, 0.5, -0.05, -0.02], [-0.5, -0.47, -0.47, -0.05], [0.47, 0.5, -0.47, -0.05]]);
-  p.push(cbox(-0.08, 0.08, 0, 0.7, -0.02, -0.01, DARK));
-  for (const [x0, x1, z0, z1] of [[-0.5, -0.1, 0.46, 0.5], [0.1, 0.5, 0.46, 0.5], [-0.5, -0.46, -0.02, 0.46], [0.46, 0.5, -0.02, 0.46]]) {
-    p.push(cbox(x0, x1, 0, 0.42, z0, z1, WALL));
+  doorway(t, 2 * dw, dh, zf, tz + 0.004);
+  t.push(doorLeaf(dw, zf - tz, 2 * dw - 0.005, dh - 0.02, 1.15));
+  beamEnds(t, [-0.4, -0.22, 0.22, 0.4], 0.95, zf, 1);
+  slits(p, [-0.31, 0.31], 0.62, 0.72, zf, 1);
+  for (const [x0, x1, z0, z1] of [[-0.5, -0.1, 0.46, 0.5], [0.1, 0.5, 0.46, 0.5], [-0.5, -0.46, zf, 0.46], [0.46, 0.5, zf, 0.46]]) {
+    b(x0, x1, 0, 0.42, z0, z1, WALL, 'B');
   }
-  const oven = new THREE.CylinderGeometry(0.035, 0.05, 0.13, 8).toNonIndexed();
-  oven.translate(-0.25, 0.065, 0.25);
-  p.push(paint(oven, OVEN));
-  return mergeParts(p);
+  clayOven(t, 0.035, 0.05, 0.13, -0.28, 0.3, 8);
+  // Ladder to the roof, leaning on the house front.
+  const lean = Math.atan2(0.125, 1.1), L = Math.hypot(0.125, 1.1);
+  for (const x of [0.275, 0.325]) {
+    const r = atlasUV(new THREE.BoxGeometry(0.007, L, 0.007).toNonIndexed(), 'wood', 1.2, ...REF);
+    r.rotateX(-lean);
+    r.translate(x, 0.55, zf + 0.067);
+    t.push(paint(r, T_BEAM));
+  }
+  for (let k = 1; k <= 5; k++) {
+    const y = k * 0.18, z = zf + 0.129 - (y / 1.1) * 0.125;
+    t.push(tbox('wood', 0.275, 0.325, y, y + 0.007, z - 0.004, z + 0.004, T_BEAM, 'RL'));
+  }
+  return finish(p, t);
 }
 
+// The plain box used for every house on small screens.
 function simpleHouse() {
-  const p = [cbox(-0.5, 0.5, 0, 1, -0.5, 0.5, WALL), cbox(-0.47, 0.47, 1, 1.02, -0.47, 0.47, ROOF), cbox(-0.08, 0.08, 0, 0.62, 0.5, 0.506, DARK)];
-  parapets(p, 1, [[-0.5, 0.5, -0.5, -0.47], [-0.5, 0.5, 0.47, 0.5], [-0.5, -0.47, -0.47, 0.47], [0.47, 0.5, -0.47, 0.47]]);
-  return mergeParts(p);
+  const p = [], t = [];
+  const b = (...a) => p.push(hbox(...a));
+  b(-0.5, 0.5, 0, 1, -0.5, 0.5, WALL, 'BT');
+  b(-0.5, 0.5, 1, 1.02, -0.5, 0.5, ROOF, 'B');
+  parapets(p, 1.02, [[-0.5, 0.5, -0.5, -0.47], [-0.5, 0.5, 0.47, 0.5], [-0.5, -0.47, -0.47, 0.47], [0.47, 0.5, -0.47, 0.47]]);
+  b(-0.065, 0.065, 0, 0.52, 0.5, 0.5005, DARK, 'RLTBK');
+  doorway(t, 0.13, 0.52, 0.5, 0.01);
+  beamEnds(t, [-0.38, -0.2, 0.2, 0.38], 0.95, 0.5, 1);
+  slits(p, [-0.29, 0.29], 0.62, 0.72, 0.5, 1);
+  return finish(p, t);
 }
 
-// Burned house: broken walls, no roof, rubble and charred beams.
-function ruinedHouse(rand) {
-  const p = [];
-  const wall = (x0, x1, z0, z1, alongX) => {
-    for (let k = 0; k < 4; k++) {
-      const t0 = k / 4, t1 = (k + 1) / 4, h = 0.16 + rand() * 0.5;
-      if (alongX) p.push(cbox(x0 + (x1 - x0) * t0, x0 + (x1 - x0) * t1, 0, h, z0, z1, WALL));
-      else p.push(cbox(x0, x1, 0, h, z0 + (z1 - z0) * t0, z0 + (z1 - z0) * t1, WALL));
+// Burned house: walls broken off and blackened, the roof fallen in as a
+// layer of ash, burnt clay and charred beams (rubble in the lanes is in props.js).
+function ruinedHouse(rand, four) {
+  const p = [], t = [];
+  const wall = (x0, x1, z0, z1, alongX, n, hmax) => {
+    for (let k = 0; k < n; k++) {
+      const t0 = k / n, t1 = (k + 1) / n, h = 0.12 + rand() * (hmax - 0.12);
+      const g = alongX ? hbox(x0 + (x1 - x0) * t0, x0 + (x1 - x0) * t1, 0, h, z0, z1, WALL, 'B')
+        : hbox(x0, x1, 0, h, z0 + (z1 - z0) * t0, z0 + (z1 - z0) * t1, WALL, 'B');
+      p.push(soot(g, 0.45 + rand() * 0.55));
     }
   };
-  wall(-0.5, 0.5, -0.5, -0.45, true);
-  wall(-0.5, 0.5, 0.45, 0.5, true);
-  wall(-0.5, -0.44, -0.45, 0.45, false);
-  wall(0.44, 0.5, -0.45, 0.45, false);
-  wall(-0.44, 0.44, -0.22, -0.18, true);
-  for (let k = 0; k < 4; k++) {
+  const lump = (x, z, sx, sy, sz, cols) => {
     const m = new THREE.IcosahedronGeometry(0.5, 0);
-    m.scale(0.28 + rand() * 0.12, 0.1 + rand() * 0.08, 0.22 + rand() * 0.1);
-    m.translate(-0.3 + rand() * 0.6, 0, -0.3 + rand() * 0.6);
-    p.push(paint(m, RUBBLE));
+    m.scale(sx, sy, sz);
+    m.rotateY(rand() * 3);
+    m.translate(x, 0, z);
+    const c = new Float32Array(m.attributes.position.count * 3);
+    for (let i = 0; i < c.length; i += 3) c.set(cols[Math.floor(rand() * cols.length)], i);
+    m.setAttribute('color', new THREE.BufferAttribute(c, 3));
+    p.push(m);
+  };
+  const beam = (x, z, len, ry, tilt) => {
+    const g = atlasUV(new THREE.BoxGeometry(len, 0.05, 0.022).toNonIndexed(), 'wood', 1.2, ...REF);
+    g.rotateZ(tilt);
+    g.rotateY(ry);
+    g.translate(x, 0.03 + Math.abs(Math.sin(tilt)) * len * 0.5, z);
+    t.push(paint(g, T_CHAR));
+  };
+  wall(-0.5, 0.5, -0.5, -0.45, true, 4, 0.66);
+  wall(0.44, 0.5, -0.45, 0.45, false, 4, 0.66);
+  wall(-0.5, -0.44, -0.45, 0.45, false, 4, 0.66);
+  if (four) {
+    wall(-0.5, -0.065, 0.45, 0.5, true, 2, 0.6);
+    wall(0.065, 0.5, 0.45, 0.5, true, 2, 0.6);
+    wall(-0.44, -0.05, -0.22, -0.18, true, 2, 0.5);
+    wall(0.05, 0.44, -0.22, -0.18, true, 2, 0.5);
+    for (const s of [-1, 1]) for (const z of [-0.06, 0.14, 0.34]) {
+      if (rand() < 0.65) t.push(tbox('stone', s * 0.2 - 0.025, s * 0.2 + 0.025, 0, 0.25 + rand() * 0.69, z - 0.025, z + 0.025, T_PILLAR, 'B'));
+      else {                                            // toppled pillar
+        const g = tbox('stone', -0.025, 0.025, 0, 0.11, -0.17, 0.17, T_PILLAR, 'B');
+        g.rotateY((rand() - 0.5) * 0.8);
+        g.translate(s * (0.2 - rand() * 0.08), 0, z + 0.05);
+        t.push(g);
+      }
+    }
+  } else {
+    wall(-0.44, -0.055, -0.07, -0.02, true, 2, 0.5);
+    wall(0.055, 0.44, -0.07, -0.02, true, 2, 0.5);
+    for (const [x0, x1, z0, z1] of [[-0.5, -0.1, 0.46, 0.5], [0.1, 0.5, 0.46, 0.5], [-0.5, -0.46, -0.02, 0.46], [0.46, 0.5, -0.02, 0.46]]) {
+      p.push(soot(hbox(x0, x1, 0, 0.08 + rand() * 0.25, z0, z1, WALL, 'B'), 0.3));
+    }
   }
-  const beam = cbox(-0.3, 0.3, 0.02, 0.05, -0.02, 0.02, CHAR);
-  beam.rotateY(rand() * 3);
-  p.push(beam);
-  return mergeParts(p);
+  p.push(hbox(-0.44, 0.44, 0.004, 0.006, -0.45, four ? 0.45 : -0.07, ASH, 'RLBFK'));      // ash and burnt roof clay
+  for (let k = 0; k < 3; k++) lump(-0.3 + rand() * 0.6, -0.35 + rand() * (four ? 0.7 : 0.25), 0.25 + rand() * 0.15, 0.12 + rand() * 0.1, 0.2 + rand() * 0.1, [EARTH, SOOT, RUBBLE, ASH]);
+  for (let k = 0; k < 4; k++) beam(-0.25 + rand() * 0.5, -0.35 + rand() * (four ? 0.7 : 0.25), 0.22 + rand() * 0.14, rand() * 3, k % 2 ? 0.2 + rand() * 0.25 : 0);
+  return finish(p, t);
+}
+
+// Which of a house's two mirror-image plans it uses: 0 has the courtyard
+// stair (four-room) or the ladder (broad-room) on its +x side, 1 on -x.
+export function houseVariant(r) {
+  return hash1(Math.round(r.x * 31 + r.z * 17) + 5) < 0.5 ? 0 : 1;
 }
 
 let HOUSE_GEOS = null;
@@ -225,14 +528,15 @@ function houseGeos() {
   const uv = plinth.attributes.uv;
   for (let i = 0; i < uv.count; i++) uv.setXY(i, uv.getX(i) * 2, uv.getY(i) * 2);
   HOUSE_GEOS = {
-    A: fourRoomHouse(false), B: fourRoomHouse(true), C: broadRoomHouse(), L: simpleHouse(),
-    R: [ruinedHouse(r), ruinedHouse(r), ruinedHouse(r)], plinth,
+    A0: fourRoomHouse(false), A1: mirrorHouse(fourRoomHouse(false)), B0: fourRoomHouse(true), B1: mirrorHouse(fourRoomHouse(true)),
+    C0: broadRoomHouse(), C1: mirrorHouse(broadRoomHouse()), L: simpleHouse(),
+    R: [ruinedHouse(r, true), mirrorHouse(ruinedHouse(r, true)), ruinedHouse(r, false), mirrorHouse(ruinedHouse(r, false))], plinth,
   };
   // Doorways and windows (the dark parts) glow when a lamp is lit inside.
-  for (const k of ['A', 'B', 'C', 'L']) {
-    const c = HOUSE_GEOS[k].attributes.color, win = new Float32Array(c.count);
+  for (const k of ['A0', 'A1', 'B0', 'B1', 'C0', 'C1', 'L']) {
+    const c = HOUSE_GEOS[k].main.attributes.color, win = new Float32Array(c.count);
     for (let i = 0; i < c.count; i++) win[i] = Math.abs(c.getX(i) - DARK[0]) < 0.01 && Math.abs(c.getY(i) - DARK[1]) < 0.01 ? 1 : 0;
-    HOUSE_GEOS[k].setAttribute('aWin', new THREE.BufferAttribute(win, 1));
+    HOUSE_GEOS[k].main.setAttribute('aWin', new THREE.BufferAttribute(win, 1));
   }
   return HOUSE_GEOS;
 }
@@ -244,27 +548,35 @@ function houseMeshes(recs, mats, { ruin = false, quality = 'high' } = {}) {
   const G = houseGeos();
   const group = new THREE.Group();
   const byKey = {};
-  recs.forEach((r, i) => {
-    const key = ruin ? `R${i % 3}` : quality === 'low' ? 'L' : r.type;
+  recs.forEach((r) => {
+    const v = houseVariant(r);
+    const key = ruin ? `R${(r.type === 'C' ? 2 : 0) + v}` : quality === 'low' ? 'L' : r.type + v;
     (byKey[key] ||= []).push(r);
   });
+  const info = ruin ? 'city-house-ruin' : 'city-house';
+  const place = (r, p, q, s) => { p.set(r.x, r.floor, r.z); q.setFromAxisAngle(Y_AXIS, r.rot); s.set(r.w, r.ht, r.d); };
   for (const [key, list] of Object.entries(byKey)) {
-    let geo = key[0] === 'R' ? G.R[+key[1]] : G[key];
+    const h = key[0] === 'R' ? G.R[+key[1]] : G[key];
+    let geo = h.main;
     if (!ruin) {
       // About one house in three keeps a lamp burning after dark.
       geo = geo.clone();
       geo.setAttribute('iLit', new THREE.InstancedBufferAttribute(Float32Array.from(list, (r) => (hash1(Math.round(r.x * 7 + r.z * 13)) < 0.33 ? 1 : 0)), 1));
     }
-    const im = instanced(geo, mats.house, list, ruin ? 'city-house-ruin' : 'city-house', (r, p, q, s, c) => {
-      p.set(r.x, r.floor, r.z);
-      q.setFromAxisAngle(Y_AXIS, r.rot);
-      s.set(r.w, r.ht, r.d);
+    group.add(instanced(geo, mats.house, list, info, (r, p, q, s, c) => {
+      place(r, p, q, s);
       const t = TINTS[r.tint], k = (ruin ? 0.6 : 1) * r.shade;
       c.setRGB(t[0] * k, t[1] * k, t[2] * k);
+    }));
+    const trim = instanced(h.trim, propAtlas(), list, info, (r, p, q, s, c) => {
+      place(r, p, q, s);
+      const k = (ruin ? 0.7 : 1) * (0.85 + 0.3 * hash1(Math.round(r.x * 3 + r.z * 5)));
+      c.setRGB(k, k * (0.96 + 0.04 * r.shade), k * r.shade);
     });
-    group.add(im);
+    trim.castShadow = !ruin && quality !== 'low';
+    group.add(trim);
   }
-  group.add(instanced(G.plinth, mats.terraceStone, recs, ruin ? 'city-house-ruin' : 'city-house', (r, p, q, s, c) => {
+  group.add(instanced(G.plinth, mats.terraceStone, recs, info, (r, p, q, s, c) => {
     p.set(r.x, r.base, r.z);
     q.setFromAxisAngle(Y_AXIS, r.rot);
     s.set(r.w * 1.03, Math.max(0.3, r.floor - r.base), r.d * 1.03);
@@ -455,7 +767,7 @@ function layoutCity({ poly, site, wall, wallHalf, exclude, streets, plazas, targ
 
 // --- City walls, towers and gates ------------------------------------------------------
 function buildWalls(mats, { line, poly, site, gates, height, thick, broad, towerEvery, ruin, shields, breachAt, infoId }) {
-  const parts = { body: [], broad: [], dressed: [], shield: [], wood: [], scree: [] };
+  const parts = { body: [], broad: [], dressed: [], shield: [], wood: [], scree: [], bench: [], bronze: [], char: [] };
   const zones = [], labels = [];
   const segs = [];
   let acc = 0;
@@ -561,6 +873,18 @@ function buildWalls(mats, { line, poly, site, gates, height, thick, broad, tower
     const gTop = ground + (height + 4) * (ruin ? 0.45 : 1);
     fbox(parts.dressed, sg, g.x, g.z, -9, -2.6, -6, 6, ground - 5, gTop, 3);
     fbox(parts.dressed, sg, g.x, g.z, 2.6, 9, -6, 6, ground - 5, gTop, 3);
+    // Stone benches against the inner face of the gate towers, where the
+    // elders sat and cases were heard (Ruth 4:1–2; Prov 31:23).
+    for (const sa of [-1, 1]) {
+      const [bx, bz] = at(sg, g.x, g.z, sa * 5.9, -6.35);
+      const by = terrainY(bx, bz, site);
+      fbox(parts.bench, sg, g.x, g.z, sa > 0 ? 3.2 : -8.6, sa > 0 ? 8.6 : -3.2, -6.7, -6, by - 0.6, by + 0.45, 2);
+    }
+    if (ruin) {
+      // The burned leaves lying in the passage (Neh 1:3; Lam 2:9).
+      fbox(parts.char, sg, g.x, g.z, -2.4, -0.3, -1.2, 2.6, ground - 0.05, ground + 0.14, 2);
+      fbox(parts.char, sg, g.x, g.z, 0.5, 2.2, 0.4, 3.9, ground - 0.05, ground + 0.11, 2);
+    }
     if (!ruin) {
       fbox(parts.dressed, sg, g.x, g.z, -2.6, 2.6, -6, 6, ground + 6.5, gTop, 3);    // chamber over the passage
       for (const b of [-5.6, 5.6]) for (let j = 0; j < 8; j++) {
@@ -569,6 +893,9 @@ function buildWalls(mats, { line, poly, site, gates, height, thick, broad, tower
       }
       for (const sa of [-1, 1]) {
         fbox(parts.wood, sg, g.x, g.z, sa > 0 ? 2.3 : -2.6, sa > 0 ? 2.6 : -2.3, -1.6, 2.4, ground, ground + 6.2, 2);   // gate leaves, open
+        for (const h of [0.6, 2.2, 3.8, 5.4]) {           // metal straps across the leaves
+          fbox(parts.bronze, sg, g.x, g.z, sa > 0 ? 2.26 : -2.64, sa > 0 ? 2.64 : -2.26, -1.55, 2.35, ground + h, ground + h + 0.16, 1);
+        }
         const [x, z] = at(sg, g.x, g.z, sa * 3.9, -6.12);
         const cap = aeolicCapital(2.4);
         cap.rotateY(Math.atan2(-sg.nx, -sg.nz));
@@ -584,12 +911,12 @@ function buildWalls(mats, { line, poly, site, gates, height, thick, broad, tower
   }
 
   const group = new THREE.Group();
-  const keyMat = { body: 'rubble', broad: 'rubble', dressed: 'ashlar', shield: 'shield', wood: 'cedar', scree: 'rubble' };
+  const keyMat = { body: 'rubble', broad: 'rubble', dressed: 'ashlar', shield: 'shield', wood: 'cedar', scree: 'rubble', bench: 'ashlar', bronze: 'bronze', char: 'charcoal' };
   for (const [k, list] of Object.entries(parts)) {
     if (!list.length) continue;
     const mesh = new THREE.Mesh(mergeParts(list), mats[keyMat[k]]);
     mesh.castShadow = mesh.receiveShadow = true;
-    mesh.userData.infoId = k === 'broad' ? 'city-broadwall' : infoId;
+    mesh.userData.infoId = k === 'broad' ? 'city-broadwall' : k === 'bench' ? 'props-gate-bench' : infoId;
     group.add(mesh);
   }
   return { group, zones, labels, gates: gs };
@@ -776,42 +1103,207 @@ function siegeRamp(mats, wallInfo) {
 }
 
 // --- Market stalls --------------------------------------------------------------------
-// Awnings of cloth on poles with goods below, in the squares inside the gates
-// where trading was done (2 Kgs 7:1; Neh 13:15–16).
-function marketStalls(mats, gates, rand) {
-  const awn = [], posts = [], goods = [];
+// Trading in the squares inside the gates (2 Kgs 7:1; Neh 13:15–16; Zeph
+// 1:10–11): stalls under cloth awnings and goods spread on mats, each with
+// the spot where its seller stands. What is sold leans on the gate: fish at
+// the Fish Gate, grain at the Gate of Ephraim (from the north), pots toward
+// the Valley Gate and Hinnom (Jer 19:1–2). Silver was weighed on a balance
+// (Jer 32:9–10): there were no coins yet.
+const lin = (c) => c.map((v) => Math.pow(v, 2.2));
+const SC = {
+  wood: lin([0.48, 0.34, 0.21]), pole: lin([0.40, 0.29, 0.19]), reed: lin([0.74, 0.64, 0.44]), stone: lin([0.78, 0.74, 0.66]),
+  clay: lin([0.74, 0.50, 0.34]), pale: lin([0.82, 0.68, 0.52]), slip: lin([0.62, 0.30, 0.20]), cook: lin([0.34, 0.24, 0.18]),
+  grain: lin([0.86, 0.74, 0.46]), barley: lin([0.70, 0.70, 0.40]), basket: lin([0.62, 0.48, 0.29]), sack: lin([0.76, 0.68, 0.54]),
+  fig: lin([0.36, 0.24, 0.17]), fish: lin([0.70, 0.70, 0.68]), fishBack: lin([0.40, 0.42, 0.42]), lentil: lin([0.62, 0.40, 0.26]),
+  bronze: lin([0.60, 0.42, 0.22]), water: lin([0.20, 0.28, 0.30]), fleece: lin([0.88, 0.84, 0.74]), leek: lin([0.40, 0.55, 0.25]),
+  oil: lin([0.55, 0.50, 0.20]),
+};
+// Which atlas tile each colour of goods is drawn with, and how many metres to the tile.
+function goodsTile(g) {
+  const c = g.attributes.color.array, key = (v) => v.map((x) => x.toFixed(3)).join();
+  const k = key([c[0], c[1], c[2]]);
+  if ([SC.wood, SC.pole].some((v) => key(v) === k)) return ['wood', 1.2];
+  if ([SC.reed, SC.basket, SC.sack, SC.fleece].some((v) => key(v) === k)) return ['weave', 0.6];
+  if (CLOTHS.some((v) => key(v) === k)) return ['weave', 0.25];
+  if (key(SC.stone) === k) return ['stone', 1];
+  return ['clay', 0.8];
+}
+const CLOTHS = [[0.84, 0.80, 0.70], [0.62, 0.22, 0.15], [0.30, 0.33, 0.50], [0.74, 0.58, 0.30], [0.56, 0.47, 0.36], [0.46, 0.22, 0.36]].map(lin);
+const MARKET_GOODS = {
+  'gate-fish': ['fish', 'fish', 'figs', 'fish', 'grain', 'cloth', 'produce', 'oil'],
+  'gate-ephraim': ['grain', 'produce', 'grain', 'wool', 'oil', 'figs', 'pottery', 'cloth'],
+  'gate-valley': ['pottery', 'grain', 'pottery', 'figs', 'pottery', 'cloth', 'oil', 'produce'],
+  'gate-water': ['produce', 'oil', 'produce', 'figs', 'grain', 'pottery', 'wool', 'cloth'],
+};
+const lathe = (pts, seg, col) => paint(new THREE.LatheGeometry(pts.map(([r, y]) => new THREE.Vector2(r, y)), seg).toNonIndexed(), col);
+const JAR = [[0.01, 0], [0.13, 0.04], [0.22, 0.22], [0.24, 0.42], [0.17, 0.58], [0.07, 0.64], [0.08, 0.72]];
+const JUG = [[0.01, 0], [0.07, 0.01], [0.1, 0.08], [0.08, 0.16], [0.035, 0.22], [0.045, 0.26]];
+const BOWL = [[0.01, 0], [0.07, 0.005], [0.15, 0.05], [0.17, 0.08]];
+const POT = [[0.01, 0], [0.12, 0.03], [0.18, 0.12], [0.16, 0.2], [0.13, 0.22], [0.14, 0.25]];
+
+function marketStalls(mats, gates, { site, late }) {
+  const rand = rng(late ? 77 : 78);
+  const body = [], goods = [], stalls = [];
   for (const g of gates) {
     const [cx, cz] = g.inner;
-    const ang = g.sg.ang;
-    for (let k = 0; k < 6; k++) {
-      const a = ang + Math.PI / 2 + (k - 2.5) * 0.42, r = 9 + rand() * 3;
-      const x = cx + Math.cos(a) * r, z = cz + Math.sin(a) * r;
-      const y = terrainY(x, z, 'square');
+    const ix = -g.sg.nx, iz = -g.sg.nz, tx = -iz, tz = ix;      // inward, and along the wall
+    const kinds = late ? MARKET_GOODS[g.id] || MARKET_GOODS['gate-water'] : ['produce', 'grain', 'oil', 'figs', 'wool', 'pottery'].sort(() => rand() - 0.5).slice(0, 4);
+    const angles = late ? [-1.45, -1.12, -0.8, -0.5, 0.5, 0.8, 1.12, 1.45] : [-1.2, -0.65, 0.65, 1.2];
+    angles.forEach((a, k) => {
+      const r = 8.4 + (k % 2) * 0.7 + rand() * 0.3;
+      const x = cx + r * (Math.cos(a) * ix + Math.sin(a) * tx), z = cz + r * (Math.cos(a) * iz + Math.sin(a) * tz);
+      const y = terrainY(x, z, site);
       const rot = Math.atan2(cx - x, cz - z);
-      awn.push({ x, y: y + 2.1, z, rot, c: [[0.75, 0.66, 0.5], [0.55, 0.22, 0.14], [0.8, 0.76, 0.66], [0.3, 0.32, 0.45]][k % 4] });
-      for (const [dx, dz] of [[-1.2, -0.9], [1.2, -0.9], [-1.2, 0.9], [1.2, 0.9]]) {
-        posts.push({ x: x + dx * Math.cos(rot) + dz * Math.sin(rot), y, z: z - dx * Math.sin(rot) + dz * Math.cos(rot) });
+      const B = [], G = [];
+      const put = (list, geo, px, py, pz, ry = 0) => {
+        const [tile, size] = goodsTile(geo);
+        atlasUV(geo, tile, size);
+        geo.rotateY(ry); geo.translate(px, py, pz); list.push(geo);
+      };
+      const awning = rand() < (late ? 0.7 : 0.45);
+      const cloth = CLOTHS[Math.floor(rand() * CLOTHS.length)];
+      let top, x0, x1, z0, z1;                                    // where goods go: on the table or the mat
+      if (awning) {
+        for (const [px, pz, h] of [[-1.2, -0.9, 2.35], [1.2, -0.9, 2.35], [-1.2, 0.9, 2.05], [1.2, 0.9, 2.05]]) {
+          const pole = new THREE.CylinderGeometry(0.04, 0.05, h, 5, 1, true).toNonIndexed();
+          put(B, paint(pole, SC.pole), px, h / 2, pz);
+        }
+        put(B, cbox(-1.15, 1.15, 0.74, 0.79, 0.25, 0.85, SC.wood), 0, 0, 0);        // table board on trestles
+        for (const s of [-1, 1]) put(B, cbox(s * 0.95 - 0.04, s * 0.95 + 0.04, 0, 0.74, 0.3, 0.8, SC.wood), 0, 0, 0);
+        const aw = cbox(-1.4, 1.4, -0.012, 0.012, -1.05, 1.05, cloth);
+        aw.rotateX(Math.atan2(0.3, 1.8));
+        put(G, aw, 0, 2.22, 0);
+        top = 0.79; x0 = -1; x1 = 1; z0 = 0.35; z1 = 0.75;
+      } else {
+        put(G, cbox(-1.0, 1.0, 0, 0.02, -0.3, 1.0, SC.reed), 0, 0, 0);
+        for (const s of [-1, 1]) {
+          const pole = new THREE.CylinderGeometry(0.035, 0.045, 1.95, 5, 1, true).toNonIndexed();
+          put(B, paint(pole, SC.pole), s * 1.05, 0.97, -0.6);
+        }
+        const sh = cbox(-1.2, 1.2, -0.01, 0.01, -0.8, 0.8, cloth);
+        sh.rotateX(Math.atan2(0.5, 1.6));
+        put(G, sh, 0, 1.68, 0.15);
+        top = 0.02; x0 = -0.85; x1 = 0.85; z0 = 0.05; z1 = 0.85;
       }
-      for (let j = 0; j < 4; j++) goods.push({ x: x + (rand() - 0.5) * 1.8, y, z: z + (rand() - 0.5) * 1.2, s: 0.25 + rand() * 0.2, c: rand() });
-    }
+      const at = (u, v) => [x0 + (x1 - x0) * u, z0 + (z1 - z0) * v];
+      const kind = kinds[k % kinds.length];
+      const jar = (px, py, pz, s = 1, col = SC.clay, handles = false) => {
+        const j = lathe(JAR, 8, col);
+        j.scale(s, s, s);
+        put(G, j, px, py, pz, rand() * 6);
+        if (handles) for (let h = 0; h < 4; h++) {                // four-handled royal type (late 8th–7th c.)
+          const hd = cbox(0.2 * s, 0.25 * s, 0.4 * s, 0.53 * s, -0.025 * s, 0.025 * s, col);
+          put(G, hd, px, py, pz, h * Math.PI / 2 + 0.4);
+        }
+      };
+      const basket = (px, py, pz, rr, fill) => {
+        put(G, paint(new THREE.CylinderGeometry(rr, rr * 0.82, rr * 1.1, 8, 1, true).toNonIndexed(), SC.basket), px, py + rr * 0.55, pz);
+        put(G, paint(new THREE.CylinderGeometry(rr * 0.97, rr * 0.97, 0.02, 8).toNonIndexed(), fill), px, py + rr * 0.98, pz);
+      };
+      const sack = (px, py, pz, col = SC.sack) => {
+        const s = new THREE.SphereGeometry(0.2, 6, 4).toNonIndexed();
+        s.scale(1, 1.3, 0.9);
+        put(G, paint(s, col), px, py + 0.24, pz, rand() * 3);
+      };
+      const bowl = (px, py, pz, fill) => {
+        put(G, lathe(BOWL, 8, SC.pale), px, py, pz);
+        if (fill) put(G, paint(new THREE.CylinderGeometry(0.14, 0.14, 0.02, 8).toNonIndexed(), fill), px, py + 0.06, pz);
+      };
+      // A balance with a stone weight, for weighing out the silver.
+      const balance = (px, py, pz) => {
+        put(G, cbox(-0.015, 0.015, 0, 0.42, -0.015, 0.015, SC.wood), px, py, pz);
+        put(G, cbox(-0.24, 0.24, 0.4, 0.415, -0.008, 0.008, SC.bronze), px, py, pz);
+        for (const s of [-1, 1]) put(G, paint(new THREE.CylinderGeometry(0.07, 0.05, 0.02, 8).toNonIndexed(), SC.bronze), px + s * 0.22, py + 0.2, pz);
+        put(G, cbox(-0.02, 0.02, 0, 0.03, -0.015, 0.015, SC.stone), px + 0.12, py, pz + 0.1);
+      };
+      if (kind === 'grain') {
+        for (let i = 0; i < 3; i++) { const [u, v] = at(0.15 + i * 0.35, 0.5); bowl(u, top, v, i === 1 ? SC.barley : SC.grain); }
+        sack(-0.7, 0, awning ? -0.5 : -0.5); sack(0.65, 0, -0.55, SC.basket);
+        basket(awning ? 0.2 : 0.4, awning ? 0 : top, awning ? 1.25 : 0.5, 0.26, SC.grain);
+        if (awning) balance(0.75, top, 0.55);
+      } else if (kind === 'figs') {
+        for (let i = 0; i < 4; i++) {
+          const [u, v] = at(0.1 + i * 0.27, 0.5);
+          const st = 2 + Math.floor(rand() * 3);
+          for (let k2 = 0; k2 < st; k2++) put(G, paint(new THREE.CylinderGeometry(0.11, 0.11, 0.045, 8).toNonIndexed(), SC.fig), u, top + 0.025 + k2 * 0.048, v);
+        }
+        basket(-0.6, 0, awning ? 1.2 : -0.45, 0.24, SC.fig);
+        basket(0.6, 0, awning ? -0.45 : -0.45, 0.22, SC.fig);
+      } else if (kind === 'oil') {
+        for (let i = 0; i < 3; i++) jar(-0.75 + i * 0.6, 0, awning ? -0.45 : -0.5, 1, i === 1 ? SC.pale : SC.clay, late);
+        for (let i = 0; i < 4; i++) { const [u, v] = at(0.1 + i * 0.27, 0.5); put(G, lathe(JUG, 7, i % 2 ? SC.slip : SC.clay), u, top, v); }
+        if (awning) balance(0.6, top, 0.55);
+      } else if (kind === 'pottery') {
+        for (let i = 0; i < 3; i++) {
+          const [u, v] = at(0.12 + i * 0.38, 0.45);
+          for (let k2 = 0; k2 < 3 + (i % 2); k2++) put(G, lathe(BOWL, 8, i === 1 ? SC.slip : SC.pale), u, top + k2 * 0.035, v);
+        }
+        for (let i = 0; i < 3; i++) put(G, lathe(POT, 8, SC.cook), -0.8 + i * 0.45, 0, awning ? 1.2 : -0.45);
+        for (let i = 0; i < 2; i++) jar(0.7 + i * 0.4 - (awning ? 0 : 1.6), 0, awning ? -0.5 : -0.1 + i * 0.1 + 0.95, 0.9);
+        put(G, lathe(JUG, 7, SC.slip), 0.85, top, at(0, 0.8)[1]);
+      } else if (kind === 'cloth') {
+        for (let i = 0; i < 5; i++) {
+          const [u, v] = at(0.08 + i * 0.21, 0.5);
+          for (let k2 = 0; k2 < 2; k2++) put(G, cbox(-0.09, 0.09, 0, 0.06, -0.15, 0.15, CLOTHS[(i + k2 * 2) % CLOTHS.length]), u, top + k2 * 0.06, v, (rand() - 0.5) * 0.2);
+        }
+        const bar = awning ? -0.9 : -0.6, bh = awning ? 1.9 : 1.6;     // cloth hung over a rail at the back
+        put(B, cbox(-1.1, 1.1, bh, bh + 0.04, -0.02, 0.02, SC.pole), 0, 0, bar + 0.05);
+        for (let i = 0; i < 3; i++) put(G, cbox(-0.28, 0.28, bh - 1.0, bh, -0.012, 0.012, CLOTHS[(i * 2 + 1) % CLOTHS.length]), -0.7 + i * 0.7, 0, bar + 0.09);
+      } else if (kind === 'fish') {
+        for (let i = 0; i < 9; i++) {                           // dried and salted fish laid in rows
+          const [u, v] = at(0.06 + (i % 5) * 0.22, i < 5 ? 0.25 : 0.75);
+          const f = new THREE.IcosahedronGeometry(0.5, 0);
+          f.scale(0.34, 0.05, 0.11);
+          put(G, paint(f, i % 3 ? SC.fish : SC.fishBack), u, top + 0.025, v, 0.15 * (rand() - 0.5));
+        }
+        basket(-0.75, 0, awning ? -0.5 : -0.5, 0.25, SC.fish);
+        basket(0.75, 0, awning ? -0.5 : -0.5, 0.22, SC.fishBack);
+      } else if (kind === 'produce') {
+        for (let i = 0; i < 4; i++) {                           // sheaves of the first barley, bundles of leeks
+          const sh = new THREE.ConeGeometry(0.09, 0.7, 6, 1, true).toNonIndexed();
+          sh.rotateZ(Math.PI / 2);
+          const [u, v] = at(0.1 + i * 0.27, 0.5);
+          put(G, paint(sh, i < 2 ? SC.barley : SC.leek), u, top + 0.08, v, Math.PI / 2 + (rand() - 0.5) * 0.3);
+        }
+        sack(-0.65, 0, -0.5, SC.lentil);
+        basket(0.6, 0, awning ? -0.5 : -0.5, 0.24, SC.lentil);
+        basket(0.1, 0, awning ? 1.25 : -0.55, 0.22, SC.leek);
+      } else if (kind === 'wool') {
+        for (let i = 0; i < 4; i++) {
+          const f = new THREE.IcosahedronGeometry(0.5, 0);
+          f.scale(0.5, 0.14, 0.38);
+          const [u, v] = at(0.12 + i * 0.25, 0.5);
+          put(G, paint(f, i === 2 ? lin([0.4, 0.33, 0.26]) : SC.fleece), u, top + 0.05, v, rand() * 3);
+        }
+        sack(-0.6, 0, -0.5, SC.fleece);
+        if (awning) balance(0.75, top, 0.55);
+      }
+      for (const geo of [...B, ...G]) { geo.rotateY(rot); geo.translate(x, y, z); }
+      body.push(...B);
+      goods.push(...G);
+      // The seller stands behind the goods, facing the customers in the square.
+      const sx = x - Math.sin(rot) * 0.35, sz = z - Math.cos(rot) * 0.35;
+      stalls.push({ x: sx, y: terrainY(sx, sz, site), z: sz, rot });
+    });
+    // A stone trough by the gate for the donkeys of those who come to trade.
+    const side = rand() < 0.5 ? -1 : 1;
+    const wx = cx - ix * 4.5 + tx * 7 * side, wz = cz - iz * 4.5 + tz * 7 * side;
+    const wy = terrainY(wx, wz, site), wr = Math.atan2(tx, tz);
+    const tr = cbox(-0.3, 0.3, -0.4, 0.55, -0.95, 0.95, SC.stone), wt = cbox(-0.24, 0.24, 0.5, 0.505, -0.88, 0.88, SC.water);
+    for (const geo of [tr, wt]) { atlasUV(geo, 'stone', 1); geo.rotateY(wr); geo.translate(wx, wy, wz); }
+    body.push(tr);
+    goods.push(wt);
   }
   const group = new THREE.Group();
-  const cloth = paint(new THREE.BoxGeometry(2.8, 0.06, 2.2).toNonIndexed(), [1, 1, 1]);
-  group.add(instanced(cloth, mats.figure, awn, 'city-market', (a, p, q, s, c) => {
-    p.set(a.x, a.y, a.z); q.setFromAxisAngle(Y_AXIS, a.rot); s.set(1, 1, 1); c.setRGB(...a.c);
-  }));
-  const pole = new THREE.CylinderGeometry(0.04, 0.05, 2.1, 5).toNonIndexed();
-  pole.translate(0, 1.05, 0);
-  group.add(instanced(paint(pole, [0.36, 0.25, 0.15]), mats.figure, posts, 'city-market', (a, p, q, s, c) => {
-    p.set(a.x, a.y, a.z); q.identity(); s.set(1, 1, 1); c.setRGB(1, 1, 1);
-  }));
-  // Jars, baskets of grain and bundles.
-  const jar = new THREE.LatheGeometry([[0.01, 0], [0.5, 0.1], [0.62, 0.55], [0.45, 0.95], [0.22, 1.05], [0.25, 1.2], [0.01, 1.2]].map(([r, y]) => new THREE.Vector2(r, y)), 8).toNonIndexed();
-  group.add(instanced(paint(jar, [1, 1, 1]), mats.figure, goods, 'city-market', (a, p, q, s, c) => {
-    p.set(a.x, a.y, a.z); q.identity(); s.setScalar(a.s);
-    if (a.c < 0.5) c.setRGB(0.62, 0.36, 0.2); else if (a.c < 0.8) c.setRGB(0.78, 0.65, 0.38); else c.setRGB(0.5, 0.42, 0.3);
-  }));
-  return group;
+  for (const [list, isSolid] of [[body, true], [goods, false]]) {
+    if (!list.length) continue;
+    const mesh = new THREE.Mesh(mergeParts(list), propAtlas());
+    mesh.castShadow = mesh.receiveShadow = true;
+    mesh.userData.infoId = 'city-market';
+    if (isSolid) mesh.userData.solid = true;
+    group.add(mesh);
+  }
+  return { group, stalls };
 }
 
 // --- Assemble ----------------------------------------------------------------------------
@@ -933,9 +1425,14 @@ export function buildCity(mats, plan, { quality = 'high' } = {}) {
     late: { fires: courtFire(lateMain), torches: torches(wallLate.gates, 'square') },
     early: { fires: courtFire(early.houses), torches: torches(wallEarly.gates, 'sp') },
   };
-  groups.late.add(marketStalls(mats, wallLate.gates.filter((g) => ['gate-fish', 'gate-water', 'gate-ephraim', 'gate-valley'].includes(g.id)), rand));
+  const marketLate = marketStalls(mats, wallLate.gates.filter((g) => ['gate-fish', 'gate-water', 'gate-ephraim', 'gate-valley'].includes(g.id)), { site: 'square', late: true });
+  const marketEarly = marketStalls(mats, wallEarly.gates, { site: 'sp', late: false });
+  groups.late.add(marketLate.group);
+  groups.early.add(marketEarly.group);
   return {
     groups, zones, labels, smoke, walk, gates, night,
+    // Where each stall's seller stands and the way they face (yaw, as Math.atan2(dx, dz)).
+    stalls: { late: marketLate.stalls, early: marketEarly.stalls },
     grids: { late: late.grid, early: early.grid },
     houses: { late: lateMain, early: early.houses },
   };

@@ -4,7 +4,7 @@
 // Elevations follow published values to within a few metres; valley courses
 // are approximate.
 import * as THREE from 'three';
-import { Y0, BASE_Y, EZ_CENTER_X, PODIUM_HALF, PALACE_PAD, CITY_WALL, EARLY_WALL, SOLOMON_PLATFORM, ROADS, KINGS_GARDEN } from './data.js';
+import { Y0, BASE_Y, EZ_CENTER_X, PODIUM_HALF, PALACE_PAD, CITY_WALL, EARLY_WALL, SOLOMON_PLATFORM, ROADS, KINGS_GARDEN, SILOAM_POOL, LOWER_POOL, GIHON } from './data.js';
 
 // --- Noise ------------------------------------------------------------------
 function hash2(ix, iz) {
@@ -190,6 +190,15 @@ export function buildTerrain(mats, { seg = DETAIL.seg } = {}) {
   }
   geo.computeVertexNormals();
   colourTerrain(geo);
+  // The ground's height as a texture, so walls can darken with dirt and damp
+  // where they meet it (materials.js). Half floats: about 10 cm steps.
+  const n = seg + 1, step = DETAIL.size / seg;
+  const hs = new Uint16Array(n * n);
+  for (let i = 0; i < n * n; i++) hs[i] = THREE.DataUtils.toHalfFloat(pos.getY(i));
+  const heightTex = new THREE.DataTexture(hs, n, n, THREE.RedFormat, THREE.HalfFloatType);
+  heightTex.magFilter = heightTex.minFilter = THREE.LinearFilter;
+  heightTex.needsUpdate = true;
+  const heightRect = new THREE.Vector4(X0 - step / 2, Z0 - step / 2, 1 / (n * step), 1 / (n * step));
   const mesh = new THREE.Mesh(geo, mats.terrain);
   mesh.receiveShadow = true;
   mesh.name = 'terrain';
@@ -252,7 +261,7 @@ export function buildTerrain(mats, { seg = DETAIL.seg } = {}) {
   const deadSea = new THREE.Mesh(sea, mats.deadSea);
   deadSea.name = 'dead-sea';
   group.add(deadSea);
-  return { group, mesh, farMesh, seg };
+  return { group, mesh, farMesh, seg, heightTex, heightRect };
 }
 
 // Re-shape the ground under the temple platforms when the period changes.
@@ -284,66 +293,196 @@ export function applySite(terr, site) {
   geo.computeBoundingSphere();
 }
 
-// --- Terrain shader: terraces, fields, roads, gardens --------------------------
+// --- Terrain shader: terraces, fields, roads, gardens, and the ground close up ---
 // The overlay textures cover the detailed patch. Mask channels:
-// R = terraced farmland, G = beaten earth inside the walls, B = irrigated garden.
-const OVERLAY_GLSL = /* glsl */ `
+// R = terraced farmland, G = beaten earth inside the walls, B = irrigated
+// garden, A = damp ground by the pools. Field texture: R = kind of field,
+// G = furrow direction, B = road.
+// Close up, the land colour (vertex colours, overlay) is modulated by real
+// ground: stony soil with pebbles; cracked, trodden earth with dung on the
+// lanes and roads; limestone bedrock breaking through on steep ground
+// (projected from three sides); furrows and stubble rows in the fields;
+// dry-stone terrace walls. From afar the same textures average out to the
+// colours the land had before, so the distant look is kept.
+const GROUND_PARS = /* glsl */ `
+uniform sampler2D ovColor;
+uniform sampler2D ovMask;
+uniform sampler2D ovField;
+uniform vec4 ovRect;
+uniform sampler2D tgSoilA;
+uniform sampler2D tgSoilN;
+uniform sampler2D tgPathA;
+uniform sampler2D tgPathN;
+uniform sampler2D tgRockA;
+uniform sampler2D tgRockN;
+uniform sampler2D tgStoneA;
+uniform sampler2D tgDet;
+varying highp vec3 vWPos;
+varying vec3 vWNorm;
+vec3 tgPert;
+float tgRough;
+float tgAO;
+`;
+
+const GROUND_GLSL = /* glsl */ `
 {
-  vec2 ouv = (vWPos.xz - ovRect.xy) * ovRect.zw;
+  highp vec2 xz = vWPos.xz;
+  vec3 nW = normalize(vWNorm);
+  float slope = 1.0 - clamp(nW.y, 0.0, 1.0);
+  float dist = length(vWPos - cameraPosition);
+  float mid = 1.0 - smoothstep(80.0, 400.0, dist);
+  vec2 ouv = (xz - ovRect.xy) * ovRect.zw;
   float inside = step(0.0, ouv.x) * step(ouv.x, 1.0) * step(0.0, ouv.y) * step(ouv.y, 1.0);
   vec4 mk = texture2D(ovMask, ouv) * inside;
   vec4 oc = texture2D(ovColor, ouv) * inside;
-  float slope = 1.0 - clamp(vWNorm.y, 0.0, 1.0);
-  diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.30, 0.24, 0.17), mk.g * 0.55);
+  vec4 fld = texture2D(ovField, ouv) * inside;
+  // Broad variation, so no texture repeat shows from afar.
+  float mac = texture2D(tgDet, xz / 53.0).a, mac2 = texture2D(tgDet, xz / 233.0 + 0.3).a;
+  diffuseColor.rgb *= 0.9 + 0.2 * mac + 0.12 * (mac2 - 0.5);
+
+  // Beaten earth inside the walls; gardens; painted fields and roads.
+  diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.34, 0.27, 0.19), mk.g * 0.55);
   float beds = 0.5 + 0.5 * sin(vWPos.x * 0.9) * sin(vWPos.z * 0.6);
   diffuseColor.rgb = mix(diffuseColor.rgb, mix(vec3(0.05, 0.10, 0.03), vec3(0.12, 0.16, 0.05), beds), mk.b * 0.85);
   diffuseColor.rgb = mix(diffuseColor.rgb, oc.rgb, oc.a);
+
+  // Stony soil everywhere, at two scales.
+  vec4 sa = texture2D(tgSoilA, xz / 2.5);
+  vec4 sn = texture2D(tgSoilN, xz / 2.5);
+  #ifndef TG_LOW
+    vec4 sb = texture2D(tgSoilA, xz / 0.83 + 0.37);
+    sa.r *= 0.8 + 0.4 * sb.r;
+  #endif
+  vec3 pert = vec3(sn.x * 2.0 - 1.0, 0.0, sn.y * 2.0 - 1.0) * 0.9;
+  float rough = sn.b, ao = sa.a;
+  float bright = sa.r * 2.0;
+  vec3 lime = vec3(0.70, 0.66, 0.58);
+  float stones = sa.g * mid * (1.0 - mk.b);
+
+  // Lanes in the city and roads outside: cracked, trodden, with dung in the lanes.
+  float trod = max(mk.g, fld.b);
+  if (trod > 0.01) {
+    vec4 pa = texture2D(tgPathA, xz / 2.0);
+    vec4 pn = texture2D(tgPathN, xz / 2.0);
+    pert = mix(pert, vec3(pn.x * 2.0 - 1.0, 0.0, pn.y * 2.0 - 1.0) * 0.8, trod);
+    bright = mix(bright, pa.r * 2.0 * (1.0 + 0.1 * fld.b), trod);
+    stones = mix(stones, pa.g * mid * 0.6, trod);
+    rough = mix(rough, pn.b, trod);
+    ao = mix(ao, pa.a, trod);
+  }
+  // 0.66: the soil texture averages about 1, and the land's own colours were
+  // chosen for a ground about this dark; brighter and the hills wash out.
+  diffuseColor.rgb *= bright * 0.66;
+  diffuseColor.rgb = mix(diffuseColor.rgb, lime * (0.75 + 0.2 * sa.r) * (0.6 + 0.6 * dot(diffuseColor.rgb, vec3(0.33)) / 0.45), stones * 0.35);
+
+  // Fields: furrows across the plough, stubble rows, rows of young grain.
+  float kp = (1.0 - smoothstep(0.06, 0.13, abs(fld.r - 0.25))) * (1.0 - fld.b);
+  float ks = (1.0 - smoothstep(0.06, 0.13, abs(fld.r - 0.5))) * (1.0 - fld.b);
+  float kg = (1.0 - smoothstep(0.06, 0.13, abs(fld.r - 0.75))) * (1.0 - fld.b);
+  if (kp + ks + kg > 0.01) {
+    float ang = fld.g * 3.14159265;
+    vec2 across = vec2(-sin(ang), cos(ang));
+    float w = dot(xz, across);
+    float fw = w / 0.55, aa = fwidth(fw);
+    float vis = 1.0 - smoothstep(0.25, 0.6, aa);
+    float ridge = cos(fw * 6.2831853);
+    pert += vec3(across.x, 0.0, across.y) * sin(fw * 6.2831853) * 0.35 * kp * vis;
+    diffuseColor.rgb *= 1.0 - kp * vis * 0.14 * (0.5 - 0.5 * ridge);
+    float row = 0.5 + 0.5 * cos(w / 0.22 * 6.2831853);
+    float rvis = 1.0 - smoothstep(0.3, 0.6, fwidth(w / 0.22));
+    diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.62, 0.53, 0.33) * (0.8 + 0.3 * sa.r), ks * rvis * row * 0.45);
+    diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.20, 0.27, 0.10) * (0.8 + 0.3 * sa.r), kg * rvis * row * 0.4);
+  }
+
+  // Bedrock breaking through on steep ground, projected from three sides.
+  #ifndef TG_LOW
+  float rw = smoothstep(0.26, 0.46, slope + 0.3 * (mac - 0.5)) * (1.0 - mk.g) * (1.0 - mk.b);
+  if (rw > 0.01) {
+    vec3 tw = pow(abs(nW), vec3(4.0)); tw /= tw.x + tw.y + tw.z;
+    vec2 ux = vWPos.zy / 3.0, uy = xz / 3.0, uz = vWPos.xy / 3.0;
+    vec3 ra = texture2D(tgRockA, ux).rgb * tw.x + texture2D(tgRockA, uy).rgb * tw.y + texture2D(tgRockA, uz).rgb * tw.z;
+    vec4 nx = texture2D(tgRockN, ux), ny = texture2D(tgRockN, uy), nz = texture2D(tgRockN, uz);
+    vec3 rp = tw.x * vec3(0.0, nx.y * 2.0 - 1.0, nx.x * 2.0 - 1.0)
+            + tw.y * vec3(ny.x * 2.0 - 1.0, 0.0, ny.y * 2.0 - 1.0)
+            + tw.z * vec3(nz.x * 2.0 - 1.0, nz.y * 2.0 - 1.0, 0.0);
+    float rr = nx.b * tw.x + ny.b * tw.y + nz.b * tw.z;
+    // keep a little of the land's own hue in the rock
+    float lum = dot(diffuseColor.rgb, vec3(0.33));
+    vec3 rock = ra * mix(vec3(1.0), diffuseColor.rgb / max(lum, 0.05) * 0.33 + 0.67, 0.4);
+    diffuseColor.rgb = mix(diffuseColor.rgb, rock * 0.72, rw * 0.8);
+    pert = mix(pert, rp * 1.2, rw);
+    rough = mix(rough, rr, rw);
+  }
+  #endif
+
   // Dry-stone terrace walls along the contours, fading out with distance.
   float yy = vWPos.y + 0.9 * sin(vWPos.x * 0.031 + vWPos.z * 0.012) + 0.7 * sin(vWPos.z * 0.027);
   float tq = yy / 1.9;
   float f = fract(tq);
-  float aa = fwidth(tq);
-  float terr = mk.r * smoothstep(0.03, 0.08, slope) * (1.0 - smoothstep(0.45, 0.65, slope)) * (1.0 - smoothstep(0.18, 0.45, aa));
-  float wallBand = 1.0 - smoothstep(0.08, 0.10 + aa * 1.5, f);
+  float aa2 = fwidth(tq);
+  float terr = mk.r * smoothstep(0.03, 0.08, slope) * (1.0 - smoothstep(0.45, 0.65, slope)) * (1.0 - smoothstep(0.18, 0.45, aa2));
+  float wallBand = (1.0 - smoothstep(0.08, 0.10 + aa2 * 1.5, f)) * terr;
   float foot = smoothstep(0.80, 0.98, f);
-  diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.33, 0.30, 0.25), wallBand * terr * 0.85);
+  if (wallBand > 0.01) {
+    #ifndef TG_LOW
+      vec4 st = texture2D(tgStoneA, vec2(vWPos.x + vWPos.z, vWPos.y * 1.6) / 4.0);
+      vec3 wallC = st.rgb * 0.85;
+      pert *= 1.0 - wallBand;
+      pert.y += (st.a - 0.5) * 0.6 * wallBand;
+    #else
+      vec3 wallC = vec3(0.40, 0.37, 0.31);
+    #endif
+    diffuseColor.rgb = mix(diffuseColor.rgb, wallC, wallBand * 0.9);
+  }
   diffuseColor.rgb *= 1.0 - foot * terr * 0.22;
+
+  // Damp earth by the pools and the channel: darker and smoother.
+  diffuseColor.rgb *= 1.0 - 0.32 * mk.a;
+  rough *= 1.0 - 0.35 * mk.a;
+
+  tgPert = pert;
+  tgRough = rough;
+  tgAO = ao;
 }
 `;
 
-// The ground texture projected from three sides and blended by the normal,
-// so steep slopes and cuttings are not smeared.
-const TRIPLANAR_GLSL = /* glsl */ `
-#ifdef USE_MAP
+const GROUND_NORMAL = /* glsl */ `
 {
-  vec3 tw = pow(abs(normalize(vWNorm)), vec3(4.0));
-  tw /= tw.x + tw.y + tw.z;
-  vec4 sampledDiffuseColor = texture2D(map, vWPos.zy / 24.0) * tw.x + texture2D(map, vWPos.xz / 24.0) * tw.y + texture2D(map, vWPos.xy / 24.0) * tw.z;
-  diffuseColor *= sampledDiffuseColor;
+  vec3 nW = normalize(normalize(vWNorm) + tgPert);
+  normal = normalize((viewMatrix * vec4(nW, 0.0)).xyz);
 }
-#endif
 `;
 
-export function installTerrainShader(mat) {
+export function installTerrainShader(mat, quality = 'high') {
   const blank = new THREE.DataTexture(new Uint8Array(4), 1, 1);
   blank.needsUpdate = true;
+  const g = mat.userData.ground;
   const uniforms = {
     ovColor: { value: blank },
     ovMask: { value: blank },
+    ovField: { value: blank },
     ovRect: { value: new THREE.Vector4(X0, Z0, 1 / DETAIL.size, 1 / DETAIL.size) },
+    tgSoilA: { value: g.soil.a }, tgSoilN: { value: g.soil.n },
+    tgPathA: { value: g.path.a }, tgPathN: { value: g.path.n },
+    tgRockA: { value: g.rock.alb }, tgRockN: { value: g.rock.nr },
+    tgStoneA: { value: g.stone.alb },
+    tgDet: g.detail,
   };
   mat.userData.ov = uniforms;
+  if (quality === 'low') mat.defines = { ...(mat.defines || {}), TG_LOW: '' };
   mat.onBeforeCompile = (shader) => {
     Object.assign(shader.uniforms, uniforms);
     shader.vertexShader = shader.vertexShader
-      .replace('#include <common>', '#include <common>\nvarying vec3 vWPos;\nvarying vec3 vWNorm;')
+      .replace('#include <common>', '#include <common>\nvarying highp vec3 vWPos;\nvarying vec3 vWNorm;')
       .replace('#include <begin_vertex>', '#include <begin_vertex>\nvWPos = (modelMatrix * vec4(transformed, 1.0)).xyz;\nvWNorm = normalize(mat3(modelMatrix) * objectNormal);');
     shader.fragmentShader = shader.fragmentShader
-      .replace('#include <common>', '#include <common>\nuniform sampler2D ovColor;\nuniform sampler2D ovMask;\nuniform vec4 ovRect;\nvarying vec3 vWPos;\nvarying vec3 vWNorm;')
-      .replace('#include <map_fragment>', TRIPLANAR_GLSL)
-      .replace('#include <color_fragment>', '#include <color_fragment>\n' + OVERLAY_GLSL);
+      .replace('#include <common>', '#include <common>\n' + GROUND_PARS)
+      .replace('#include <color_fragment>', '#include <color_fragment>\n' + GROUND_GLSL)
+      .replace('#include <roughnessmap_fragment>', 'float roughnessFactor = roughness * tgRough;')
+      .replace('#include <normal_fragment_maps>', GROUND_NORMAL)
+      .replace('#include <aomap_fragment>', 'reflectedLight.indirectDiffuse *= tgAO;\nreflectedLight.directDiffuse *= mix(1.0, tgAO, 0.3);');
   };
-  mat.customProgramCacheKey = () => 'terrain-overlay-v3';
+  mat.customProgramCacheKey = () => 'terrain-ground-v4' + quality;
 }
 
 // Hezekiah's tunnel, Gihon to Siloam (it runs underground).
@@ -359,6 +498,13 @@ export function paintOverlay(period, plan) {
   const P = (x, z) => [(x - X0) * k, (z - Z0) * k];
   const poly = cityPoly(period);
   const rand = rng(77);
+  // Field texture for the shader: kind of field (r), furrow direction (g), road (b).
+  const NF = 2048, kf = NF / DETAIL.size;
+  const fc = document.createElement('canvas');
+  fc.width = fc.height = NF;
+  const fg = fc.getContext('2d');
+  fg.fillStyle = '#000'; fg.fillRect(0, 0, NF, NF);
+  const PF = (x, z) => [(x - X0) * kf, (z - Z0) * kf];
 
   // Fields: a patchwork of ploughland, stubble and green grain.
   const palette = [[122, 90, 66, 0.32], [192, 168, 114, 0.3], [124, 130, 76, 0.32], [150, 120, 88, 0.22]];
@@ -379,6 +525,14 @@ export function paintOverlay(period, plan) {
       }
     }
     g.restore();
+    const [fx, fy] = PF(f.x, f.z);
+    const ang = ((f.ang % Math.PI) + Math.PI) % Math.PI;
+    fg.save();
+    fg.translate(fx, fy);
+    fg.rotate(f.ang);
+    fg.fillStyle = `rgb(${[64, 128, 191, 20][f.kind]},${Math.round(ang / Math.PI * 255)},0)`;
+    fg.fillRect(-f.w * kf / 2, -f.d * kf / 2, f.w * kf, f.d * kf);
+    fg.restore();
   }
 
   // Roads: beaten tracks, wider and paler near the gates.
@@ -392,6 +546,14 @@ export function paintOverlay(period, plan) {
       road.pts.forEach(([x, z], i) => { const [px, py] = P(x, z); if (i) g.lineTo(px, py); else g.moveTo(px, py); });
       g.stroke();
     }
+    fg.globalCompositeOperation = 'lighter';
+    fg.strokeStyle = 'rgb(0,0,255)';
+    fg.lineJoin = fg.lineCap = 'round';
+    fg.lineWidth = 4.6 * kf;
+    fg.beginPath();
+    road.pts.forEach(([x, z], i) => { const [px, py] = PF(x, z); if (i) fg.lineTo(px, py); else fg.moveTo(px, py); });
+    fg.stroke();
+    fg.globalCompositeOperation = 'source-over';
   }
 
   // Threshing floors.
@@ -415,6 +577,8 @@ export function paintOverlay(period, plan) {
     g.stroke();
     g.setLineDash([]);
   }
+  const field = new THREE.CanvasTexture(fc);
+  field.anisotropy = 8;
   const color = new THREE.CanvasTexture(cnv);
   color.colorSpace = THREE.SRGBColorSpace;
   color.anisotropy = 8;
@@ -438,10 +602,17 @@ export function paintOverlay(period, plan) {
     data[o] = Math.round(Math.max(0, Math.min(1, farmed)) * 255);
     data[o + 1] = inCity && !onPlat ? 255 : 0;
     data[o + 2] = Math.round(garden * (inCity ? 0 : 1) * 255);
-    data[o + 3] = 255;
+    // Damp ground round the pools and the spring, and along the channel's gardens.
+    let damp = 0;
+    for (const p of [SILOAM_POOL, LOWER_POOL]) {
+      const dx = Math.max(0, Math.abs(x - p.x) - p.w / 2), dz = Math.max(0, Math.abs(z - p.z) - p.d / 2);
+      damp = Math.max(damp, smooth(14, 2, Math.hypot(dx, dz)) * (period === 'early' && p === SILOAM_POOL ? 0 : 1));
+    }
+    damp = Math.max(damp, smooth(22, 4, Math.hypot(x - GIHON.x, z - GIHON.z)), garden * 0.5);
+    data[o + 3] = Math.round(damp * 255);
   }
   const mask = new THREE.DataTexture(data, M, M);
   mask.magFilter = mask.minFilter = THREE.LinearFilter;
   mask.needsUpdate = true;
-  return { color, mask };
+  return { color, mask, field };
 }

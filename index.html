@@ -153,6 +153,7 @@ body.panels-hidden #views, body.panels-hidden #info { display: none; }
 .speed, .gfx { display: flex; gap: 4px; margin-top: 6px; }
 .gfx { margin-top: 2px; }
 .gfx-note { font: 11.5px var(--font-mono); color: var(--muted); margin-top: 6px; }
+.gfx-diag { color: #ffb9a3; white-space: pre-wrap; overflow-wrap: anywhere; user-select: text; -webkit-user-select: text; }
 .speed button, .gfx button { flex: 1; border: 1px solid var(--line); background: transparent; color: var(--muted); border-radius: 6px; padding: 3px 4px; font: 11.5px var(--font-mono); cursor: pointer; }
 .speed button[aria-pressed="true"], .gfx button[aria-pressed="true"] { color: var(--stone); border-color: var(--accent); }
 .walk-btn {
@@ -234,11 +235,47 @@ body.touring .modes, body.touring .vision, body.touring .cam, body.touring .chip
 #error { display: none; max-width: 420px; color: #f1c3b8; font-size: 14px; }
 
 .mobile-bar { display: none; }
-#walkpad { position: absolute; right: calc(16px + env(safe-area-inset-right, 0px)); bottom: calc(64px + env(safe-area-inset-bottom, 0px)); display: none; grid-template-columns: repeat(3, 48px); gap: 6px; }
-#walkpad button { height: 48px; border-radius: 10px; border: 1px solid var(--line); background: var(--panel); font-size: 18px; touch-action: none; }
-#walkpad .sp { visibility: hidden; }
-body.walking #walkpad.touch, body.flying #walkpad.touch { display: grid; }
-body:not(.flying) #walkpad .fly-only { visibility: hidden; }
+/* Walking and flying by touch: a thumb stick that appears where the left
+   thumb lands in the lower left, and buttons under the right thumb. The layer
+   itself lets touches through to the scene, where dragging looks around. */
+#walkpad {
+  position: absolute; inset: 0; display: none; pointer-events: none;
+  -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; -webkit-tap-highlight-color: transparent;
+}
+body.walking #walkpad.touch, body.flying #walkpad.touch { display: block; }
+body.touring #walkpad { display: none !important; }
+#stick {
+  position: absolute; left: var(--sx, calc(96px + env(safe-area-inset-left, 0px))); top: var(--sy, calc(100% - 200px - env(safe-area-inset-bottom, 0px)));
+  width: calc(var(--sr, 56px) * 2); height: calc(var(--sr, 56px) * 2); transform: translate(-50%, -50%);
+  border-radius: 50%; border: 2px solid rgba(236, 227, 207, 0.32); background: rgba(14, 19, 27, 0.18); opacity: 0.55;
+}
+#stick.on { opacity: 1; border-color: rgba(236, 227, 207, 0.6); background: rgba(14, 19, 27, 0.32); }
+#stick i {
+  position: absolute; left: 50%; top: 50%; width: 46%; height: 46%; border-radius: 50%;
+  background: rgba(236, 227, 207, 0.55); box-shadow: 0 1px 6px rgba(0, 0, 0, 0.4);
+  transform: translate(calc(-50% + var(--kx, 0px)), calc(-50% + var(--ky, 0px)));
+}
+#walkpad .pad-btns {
+  position: absolute; right: calc(20px + env(safe-area-inset-right, 0px)); bottom: calc(96px + env(safe-area-inset-bottom, 0px));
+  display: grid; grid-template-columns: auto auto; grid-template-areas: "up run" "down jump"; gap: 14px; align-items: end; justify-items: center; pointer-events: auto;
+}
+#walkpad button {
+  width: 60px; height: 60px; border-radius: 50%; border: 1px solid rgba(236, 227, 207, 0.3); background: var(--panel);
+  font: 600 13px/1 var(--font-mono); letter-spacing: 0.04em; color: var(--stone); cursor: pointer; backdrop-filter: blur(6px);
+  touch-action: none; -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; -webkit-tap-highlight-color: transparent;
+}
+#walkpad button[data-k="jump"] { grid-area: jump; width: 78px; height: 78px; font-size: 14px; }
+#walkpad button[data-k="run"] { grid-area: run; }
+#walkpad button[data-k="u"] { grid-area: up; }
+#walkpad button[data-k="d"] { grid-area: down; }
+#walkpad button.held, #walkpad button[aria-pressed="true"] { background: var(--accent); color: #17130b; border-color: var(--accent); }
+body:not(.flying) #walkpad .fly-only, body:not(.walking) #walkpad .walk-only { display: none; }
+/* The aim of a click while the mouse is held by the page. */
+#crosshair {
+  position: absolute; left: 50%; top: 50%; width: 6px; height: 6px; margin: -3px 0 0 -3px; border-radius: 50%; display: none; pointer-events: none;
+  background: rgba(255, 250, 238, 0.85); box-shadow: 0 0 0 1.5px rgba(10, 12, 16, 0.55);
+}
+body.pointer-locked.walking #crosshair, body.pointer-locked.flying #crosshair { display: block; }
 .cam button[aria-pressed="true"] { background: var(--lapis); color: #0e1520; }
 
 @media (max-width: 860px) {
@@ -263,7 +300,9 @@ body:not(.flying) #walkpad .fly-only { visibility: hidden; }
     backdrop-filter: blur(8px); font-weight: 500; cursor: pointer;
   }
   .mobile-bar button[aria-expanded="true"] { background: var(--accent); color: #17130b; }
-  #walkpad { bottom: calc(70px + env(safe-area-inset-bottom, 0px)); }
+  #walkpad .pad-btns { right: calc(14px + env(safe-area-inset-right, 0px)); bottom: calc(78px + env(safe-area-inset-bottom, 0px)); gap: 10px; }
+  #walkpad button { width: 54px; height: 54px; }
+  #walkpad button[data-k="jump"] { width: 68px; height: 68px; }
   #tour-card {
     left: calc(10px + env(safe-area-inset-left, 0px)); right: calc(10px + env(safe-area-inset-right, 0px));
     bottom: calc(10px + env(safe-area-inset-bottom, 0px)); width: auto; max-height: 46%;
@@ -299,8 +338,8 @@ body:not(.flying) #walkpad .fly-only { visibility: hidden; }
     <div class="cam" role="group" aria-label="Camera">
       <span class="vlabel">Camera</span>
       <button type="button" data-cam="orbit" aria-pressed="true" title="Turn about a point: drag, right-drag to pan, scroll to zoom">Orbit</button>
-      <button type="button" data-cam="fly" aria-pressed="false" title="Fly anywhere, through walls: W A S D, E up, Q down, drag to look">Fly</button>
-      <button type="button" data-cam="walk" aria-pressed="false" title="First person at eye height: W A S D, drag to look">Walk</button>
+      <button type="button" data-cam="fly" aria-pressed="false" title="Fly anywhere, through walls: W A S D, E up, Q down, mouse or drag to look; on touch, left thumb to fly">Fly</button>
+      <button type="button" data-cam="walk" aria-pressed="false" title="First person at eye height: W A S D, mouse or drag to look, Shift to run, Space to jump; on touch, left thumb to walk">Walk</button>
     </div>
     <div class="brand-row">
       <button type="button" class="tour-btn" id="tour-start" title="Follow the man with the measuring reed through Ezekiel 40–48">Guided tour <small>Ezekiel 40–48</small></button>
@@ -353,6 +392,7 @@ body:not(.flying) #walkpad .fly-only { visibility: hidden; }
         <button type="button" data-gfx="low" aria-pressed="false">Low</button>
       </div>
       <div class="gfx-note" id="gfx-now"></div>
+      <div class="gfx-note gfx-diag" id="gfx-diag" hidden></div>
     </div>
   </aside>
 
@@ -380,9 +420,15 @@ body:not(.flying) #walkpad .fly-only { visibility: hidden; }
       <button type="button" id="tour-next" class="primary">Next</button>
     </div>
   </section>
-  <div id="walkpad" aria-label="Walk controls">
-    <button type="button" data-k="u" class="fly-only" aria-label="Up">⤒</button><button type="button" data-k="f" aria-label="Forward">▲</button><button type="button" data-k="d" class="fly-only" aria-label="Down">⤓</button>
-    <button type="button" data-k="l" aria-label="Turn left">◀</button><button type="button" data-k="b" aria-label="Back">▼</button><button type="button" data-k="r" aria-label="Turn right">▶</button>
+  <div id="crosshair" aria-hidden="true"></div>
+  <div id="walkpad" aria-label="Touch controls for walking and flying">
+    <div id="stick" aria-hidden="true"><i></i></div>
+    <div class="pad-btns">
+      <button type="button" data-k="u" class="fly-only" aria-label="Up">Up</button>
+      <button type="button" data-k="d" class="fly-only" aria-label="Down">Down</button>
+      <button type="button" data-k="run" aria-pressed="false" aria-label="Run">Run</button>
+      <button type="button" data-k="jump" class="walk-only" aria-label="Jump">Jump</button>
+    </div>
   </div>
 
   <div id="loading">

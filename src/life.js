@@ -4,7 +4,7 @@ import * as THREE from 'three';
 import { terrainY, rng, insidePolygon, LATE_POLY } from './terrain.js';
 import { CUBIT, LEVEL, BASE_Y, PALACE_PAD, ROADS } from './data.js';
 import { toWorld } from './ezekiel.js';
-import { Crowd, Path, smoothPts, figureKit, ACT, PROP } from './people.js';
+import { Crowd, Path, smoothPts, figureKit, ACT, PROP, FACE, FACE_BEARD, SLOT, look } from './people.js';
 export { focus } from './people.js';
 
 const { outer: O, inner: I, house: H } = LEVEL;
@@ -14,13 +14,13 @@ const EZ_U = 125;                                                               
 // Clothing: linen, undyed wool in many shades, and the rarer dyed cloth
 // (madder red, indigo, ochre, purple). Written as display colours, converted
 // to the renderer's linear colours.
-const lin = (c) => c.map((v) => Math.pow(v, 2.2));
-const LINEN = lin([0.9, 0.88, 0.82]);
-const WOOL = [[0.8, 0.74, 0.62], [0.66, 0.57, 0.45], [0.52, 0.42, 0.31], [0.72, 0.7, 0.66], [0.4, 0.33, 0.26], [0.86, 0.81, 0.7], [0.6, 0.5, 0.38]].map(lin);
-const DYED = [[0.62, 0.2, 0.14], [0.24, 0.3, 0.52], [0.74, 0.56, 0.26], [0.44, 0.2, 0.38]].map(lin);
+export const lin = (c) => c.map((v) => Math.pow(v, 2.2));
+export const LINEN = lin([0.9, 0.88, 0.82]);
+export const WOOL = [[0.8, 0.74, 0.62], [0.66, 0.57, 0.45], [0.52, 0.42, 0.31], [0.72, 0.7, 0.66], [0.4, 0.33, 0.26], [0.86, 0.81, 0.7], [0.6, 0.5, 0.38]].map(lin);
+export const DYED = [[0.62, 0.2, 0.14], [0.24, 0.3, 0.52], [0.74, 0.56, 0.26], [0.44, 0.2, 0.38]].map(lin);
 const SKIN = [[0.64, 0.47, 0.35], [0.58, 0.41, 0.29], [0.7, 0.53, 0.4], [0.5, 0.35, 0.24], [0.66, 0.49, 0.36]].map(lin);
 const HAIR = [[0.1, 0.07, 0.05], [0.16, 0.11, 0.07], [0.24, 0.16, 0.1]].map(lin);
-const GREY = lin([0.62, 0.6, 0.57]);
+export const GREY = lin([0.62, 0.6, 0.57]);
 const BRONZE = lin([0.66, 0.46, 0.24]);
 
 // --- Smoke ---------------------------------------------------------------------------
@@ -69,7 +69,7 @@ function smoke(points, { big = false, rand }) {
 // --- Paths through the lanes --------------------------------------------------------------
 // Random walks along the street and lane cells of the city layout, kept
 // mostly straight, rounded off, with heights from the ground.
-function lanePaths(grid, rand, count, steps) {
+export function lanePaths(grid, rand, count, steps, minPts = 14) {
   const { occ, W, D, bb, cell } = grid;
   const cells = [];
   for (let k = 0; k < occ.length; k++) if (occ[k] === 2 || occ[k] === 3) cells.push(k);
@@ -94,7 +94,7 @@ function lanePaths(grid, rand, count, steps) {
       if (!moved) break;
       pts.push([bb.x0 + (i + 0.5) * cell, bb.z0 + (j + 0.5) * cell]);
     }
-    if (pts.length < 14) continue;
+    if (pts.length < minPts) continue;
     const thin = pts.filter((_, q) => q % 2 === 0 || q === pts.length - 1);
     paths.push(new Path(smoothPts(thin).map(([x, z]) => [x, grid.at(x, z), z])));
   }
@@ -103,40 +103,78 @@ function lanePaths(grid, rand, count, steps) {
 
 const line = (pts) => new Path(pts.map((p) => [p.x, p.y, p.z]));
 
-export function buildLife(mats, ctx) {
-  const kit = figureKit(ctx.quality);
-  const rand = rng(2024);
+// Dressing people and beasts. Shared with trades.js, so the whole city is
+// clothed alike: build, height, head-cloth or cap, beard to go with the
+// face, mantle over both shoulders or one, sandals or bare feet, girdle or
+// sash, now and then a striped or banded mantle.
+export function folk(rand) {
   const pick = (arr) => arr[Math.floor(rand() * arr.length)];
-  const few = ctx.quality === 'low' ? 0.5 : 1;
-  const N = (n) => Math.max(1, Math.round(n * few));
-
-  // One person, dressed for their place in life.
+  const wpick = (opts) => { let r = rand() * opts.reduce((a, [, w]) => a + w, 0); for (const [v, w] of opts) if ((r -= w) <= 0) return v; return opts[0][0]; };
   const person = (kind, o = {}) => {
-    const old = rand() < 0.15;
+    const old = o.old ?? rand() < 0.15;
     const base = {
       kind, skin: pick(SKIN), hair: old ? GREY : pick(HAIR), phase: rand() * 6.28,
-      speed: 1.05 + rand() * 0.4, lateral: (rand() - 0.5) * 1.4,
+      speed: (old ? 0.75 : 1.05) + rand() * 0.4, lateral: (rand() - 0.5) * 1.4,
+      tall: 0.95 + rand() * 0.1, build: 0.88 + rand() * 0.3 + (old ? 0.06 : 0),
     };
-    if (kind === 'man') Object.assign(base, { cloth: pick(WOOL), mantle: rand() < 0.15 ? pick(DYED) : pick(WOOL), face: old ? 2 : pick([0, 1, 6, 7]), prop: rand() < 0.12 ? PROP.staff : PROP.none });
-    if (kind === 'woman') Object.assign(base, { cloth: rand() < 0.2 ? pick(DYED) : pick(WOOL), mantle: rand() < 0.25 ? pick(DYED) : pick(WOOL), face: old ? 4 : 3, scale: 0.94 + rand() * 0.04 });
-    if (kind === 'priest') Object.assign(base, { cloth: LINEN, mantle: pick(DYED.slice(0, 2)), face: pick([1, 6, 2]), speed: 0.9 + rand() * 0.3 });
-    if (kind === 'worker') Object.assign(base, { cloth: pick(WOOL), mantle: pick(WOOL), face: pick([0, 7, 6]) });
-    if (kind === 'soldier') Object.assign(base, { cloth: pick([[0.45, 0.18, 0.1], [0.5, 0.42, 0.3]]), mantle: pick(WOOL), face: pick([0, 7]), prop: PROP.arms });
-    if (kind === 'child') Object.assign(base, { cloth: pick(WOOL), mantle: pick(WOOL), face: 5, scale: 0.6 + rand() * 0.14, speed: 1.2 + rand() * 0.5 });
-    if (kind !== 'child') base.scale = (base.scale || 1) * (0.96 + rand() * 0.08);
+    const v = { head: 0, mantle: 0, feet: rand() < 0.3 ? 1 : 0, belt: rand() < 0.35 ? 1 : 0 };
+    let pat = 0;
+    if (kind === 'man') {
+      Object.assign(base, { cloth: pick(WOOL), mantle: rand() < 0.15 ? pick(DYED) : pick(WOOL), face: old ? pick(FACE.elder) : pick(FACE.man), prop: rand() < 0.12 ? PROP.staff : PROP.none });
+      v.head = wpick([[0, 0.45], [1, 0.22], [2, 0.18], [3, 0.15]]);
+      v.mantle = wpick([[1, 0.5], [2, 0.25], [0, 0.25]]);
+      if (rand() < 0.3) pat = 1 + Math.floor(rand() * 3);
+      if (old) Object.assign(base, { stoop: 0.12 + rand() * 0.2, prop: rand() < 0.7 ? PROP.staff : PROP.none });
+    }
+    if (kind === 'woman') {
+      Object.assign(base, { cloth: rand() < 0.2 ? pick(DYED) : pick(WOOL), mantle: rand() < 0.25 ? pick(DYED) : pick(WOOL), face: old ? pick(FACE.oldWoman) : pick(FACE.woman), tall: 0.9 + rand() * 0.08 });
+      v.head = wpick([[0, 0.45], [1, 0.35], [2, 0.2]]);
+      v.belt = rand() < 0.8 ? 0 : 1;
+      if (rand() < 0.2) pat = 1 + Math.floor(rand() * 3);
+      if (old) Object.assign(base, { stoop: 0.1 + rand() * 0.2 });
+    }
+    if (kind === 'priest') Object.assign(base, { cloth: LINEN, mantle: pick(DYED.slice(0, 2)), face: pick(FACE.priest), speed: 0.9 + rand() * 0.3 });
+    if (kind === 'worker') {
+      Object.assign(base, { cloth: pick(WOOL), mantle: pick(WOOL), face: pick(FACE.worker), build: 0.95 + rand() * 0.25 });
+      v.head = wpick([[0, 0.4], [1, 0.3], [2, 0.3]]);
+      v.feet = rand() < 0.45 ? 1 : 0;
+    }
+    if (kind === 'soldier') Object.assign(base, { cloth: pick([[0.45, 0.18, 0.1], [0.5, 0.42, 0.3]]), mantle: pick(WOOL), face: pick(FACE.soldier), prop: PROP.arms, build: 1 + rand() * 0.15 });
+    if (kind === 'child') {
+      const girl = rand() < 0.5;
+      Object.assign(base, { cloth: pick(WOOL), mantle: rand() < 0.3 ? pick(DYED) : pick(WOOL), face: girl ? 14 : 5, scale: 0.55 + rand() * 0.2, speed: 1.2 + rand() * 0.5, tall: 1, build: 0.9 + rand() * 0.15 });
+      v.head = girl && rand() < 0.6 ? 1 : 0;
+      v.feet = rand() < 0.6 ? 1 : 0;
+    }
+    if (kind !== 'child') base.scale = (base.scale || 1) * (0.97 + rand() * 0.06);
     for (const k of Object.keys(o)) if (o[k] === undefined) delete o[k];
-    return { ...base, ...o };
+    const out = { ...base, pat, ...o };
+    v.beard = FACE_BEARD[out.face] ?? 0;
+    if (out.look === undefined) out.look = look(v);
+    return out;
   };
   const beast = (type, o = {}) => {
     const T = {
-      sheep: { cloth: lin([0.86, 0.82, 0.72]), mantle: lin([0.45, 0.38, 0.33]), scale: 0.72 },
+      sheep: { cloth: lin([0.86, 0.82, 0.72]), mantle: lin([0.45, 0.38, 0.33]), scale: 0.72, pat: 1 },
       goat: { cloth: rand() < 0.7 ? lin([0.16, 0.14, 0.12]) : lin([0.5, 0.38, 0.26]), mantle: lin([0.12, 0.1, 0.09]), scale: 0.68 },
       donkey: { cloth: lin([0.6, 0.56, 0.52]), mantle: lin([0.84, 0.82, 0.78]), scale: 1.25 },
       ox: { cloth: lin([0.56, 0.42, 0.3]), mantle: lin([0.36, 0.27, 0.2]), scale: 1.62 },
       jackal: { cloth: lin([0.72, 0.6, 0.42]), mantle: lin([0.3, 0.24, 0.18]), scale: 0.6 },
+      camel: { kind: 'camel', cloth: lin([0.7, 0.56, 0.38]), mantle: lin([0.5, 0.38, 0.26]), scale: 1.25 },
+      horse: { kind: 'horse', cloth: pick([lin([0.42, 0.26, 0.15]), lin([0.3, 0.2, 0.13]), lin([0.62, 0.55, 0.48])]), mantle: lin([0.12, 0.09, 0.07]), scale: 1.05 },
     }[type];
     return { kind: 'beast', ...T, skin: T.mantle, hair: T.mantle, phase: rand() * 6.28, speed: type === 'jackal' ? 0.9 : 0.35, ...o };
   };
+  return { person, beast, pick, wpick };
+}
+
+export function buildLife(mats, ctx) {
+  const kit = figureKit(ctx.quality);
+  const rand = rng(2024);
+  const { person, beast, pick } = folk(rand);
+  const few = ctx.quality === 'low' ? 0.5 : 1;
+  const N = (n) => Math.max(1, Math.round(n * few));
+
   const groups = {};
   const crowds = {};
   const make = (name) => (crowds[name] = new Crowd(name));
@@ -235,10 +273,11 @@ export function buildLife(mats, ctx) {
   }
 
   // --- The city --------------------------------------------------------------------------
-  // Walking the lanes (women often with a jar on the head), children, elders
-  // and traders at the gates (Prov 31:23; 2 Kgs 7:1), women grinding and
-  // baking at their doors, guards at the gates.
-  const town = (name, grid, n, houses, gates, torches) => {
+  // Walking the lanes: women with a jar on the head or spinning as they go,
+  // men with a sack on the shoulder or wood on the back, elders with a
+  // staff, children running. Elders and traders at the gates (Prov 31:23;
+  // 2 Kgs 7:1), guards at the gates. Work at the doors is in trades.js.
+  const town = (name, grid, n, gates, torches) => {
     const c = make(name);
     const paths = lanePaths(grid, rand, Math.round(n * 1.4), 90);
     c.setPathPool(paths);
@@ -248,19 +287,26 @@ export function buildLife(mats, ctx) {
       const r = rand();
       const kind = r < 0.42 ? 'man' : r < 0.82 ? 'woman' : r < 0.94 ? 'child' : 'worker';
       const o = { path, s: rand() * path.length, dir: rand() < 0.5 ? 1 : -1, pause: [1, 9], lateral: (rand() - 0.5) * 1.2, local: i % 2 === 0 };
-      if (kind === 'woman' && rand() < 0.35) Object.assign(o, { act: ACT.carry, prop: PROP.jar });
-      else if (kind === 'woman' && rand() < 0.2) o.prop = PROP.basket;
-      if (kind === 'worker' && rand() < 0.5) o.prop = PROP.basket;
+      const q = rand();
+      if (kind === 'woman') {
+        if (q < 0.32) Object.assign(o, { act: ACT.carry, prop: PROP.jar });
+        else if (q < 0.44) o.prop = PROP.basket;
+        else if (q < 0.5) o.prop = PROP.spindle;
+        else if (q < 0.56) Object.assign(o, { act: ACT.backload, prop: PROP.bundle, speed: 0.9 });
+        else if (q < 0.6) Object.assign(o, { prop: PROP.tray, act: ACT.carry });
+      } else if (kind === 'man') {
+        if (q < 0.1) Object.assign(o, { act: ACT.shoulder, prop: PROP.sack });
+        else if (q < 0.16) Object.assign(o, { act: ACT.backload, prop: PROP.bundle, speed: 0.9 });
+        else if (q < 0.26) Object.assign(o, { old: true, act: ACT.hobble, prop: PROP.staff, speed: 0.55 + rand() * 0.2 });
+      } else if (kind === 'child') {
+        if (q < 0.4) Object.assign(o, { act: ACT.run, speed: 2.4 + rand() * 1.2, pause: [0.5, 3] });
+      } else if (q < 0.5) o.prop = PROP.basket;
+      else if (q < 0.8) Object.assign(o, { act: ACT.shoulder, prop: PROP.sack });
       c.add(person(kind, o));
     }
     for (const [gx, gz] of gates) for (let i = 0; i < 6; i++) {
       const x = gx + (rand() - 0.5) * 12, z = gz + (rand() - 0.5) * 12;
-      c.add(person(i < 4 ? 'man' : 'woman', { x, y: grid.at(x, z), z, yaw: rand() * 6.28, act: i < 3 ? ACT.talk : ACT.idle, hair: i < 2 ? GREY : undefined, face: i < 2 ? 2 : undefined }));
-    }
-    for (const h of houses.filter((_, i) => i % Math.max(1, Math.round(houses.length / N(40))) === 0)) {
-      const off = h.d / 2 + 0.9;
-      const x = h.x + Math.sin(h.rot) * off, z = h.z + Math.cos(h.rot) * off;
-      c.add(person('woman', { x, y: grid.at(x, z), z, yaw: h.rot + Math.PI, act: ACT.work }));
+      c.add(person(i < 4 ? 'man' : 'woman', { x, y: grid.at(x, z), z, yaw: rand() * 6.28, act: i < 3 ? ACT.talk : i === 5 ? ACT.sit : ACT.idle, old: i < 2 }));
     }
     // Guards stand a little off the wall, by the torches.
     for (let i = 0; i < torches.length; i += 1) {
@@ -270,12 +316,23 @@ export function buildLife(mats, ctx) {
     }
     return c.build(kit).group;
   };
-  groups.townLate = town('townLate', ctx.grids.late, 560, ctx.houses.late, ctx.gates.late, ctx.night.late.torches);
-  groups.townEarly = town('townEarly', ctx.grids.early, 220, ctx.houses.early, ctx.gates.early, ctx.night.early.torches);
+  groups.townLate = town('townLate', ctx.grids.late, 560, ctx.gates.late, ctx.night.late.torches);
+  groups.townEarly = town('townEarly', ctx.grids.early, 220, ctx.gates.early, ctx.night.early.torches);
 
   // --- The countryside ------------------------------------------------------------------
-  // Farmers in the fields, ploughing teams, oxen threshing, travellers with
-  // donkeys on the roads.
+  // Hoeing and reaping in the fields, ploughing teams with the ard, oxen
+  // drawing the threshing sledge with the driver standing on it (Isa 41:15),
+  // winnowing in the afternoon wind, travellers on the roads, some riding
+  // donkeys, others leading them laden with panniers.
+  const ARD = look({ load: 3 }), PANNIERS = look({ load: 1 }), SADDLE = look({ load: 2 }), SLEDGE = look({ gear: 1 });
+  const ploughTeam = (c, f, Y, o = {}) => {
+    const ax = Math.cos(f.ang), az = Math.sin(f.ang), L = f.w * 0.42;
+    const pts = [];
+    for (let k = 0; k <= 8; k++) { const t = -L + (2 * L * k) / 8; pts.push([f.x + ax * t, Y(f.x + ax * t, f.z + az * t), f.z + az * t]); }
+    const plough = c.add(person('worker', { path: new Path(pts), s: rand() * L, speed: 0.55, pause: [1.5, 3], lateral: 0, act: ACT.plough, prop: PROP.staff, ...o }));
+    c.add(beast('ox', { follow: plough, gap: -2.6, lateral: 0.65, look: ARD }));
+    c.add(beast('ox', { follow: plough, gap: -2.6, lateral: -0.65 }));
+  };
   const country = (name, period) => {
     const c = make(name);
     const fields = ctx.plan.fields.filter((f) => period === 'early' || !insidePolygon(f.x, f.z, LATE_POLY));
@@ -283,22 +340,24 @@ export function buildLife(mats, ctx) {
     for (let i = 0; i < N(30); i++) {
       const f = pick(fields);
       const x = f.x + (rand() - 0.5) * f.w * 0.6, z = f.z + (rand() - 0.5) * f.d * 0.6;
-      c.add(person(rand() < 0.75 ? 'worker' : 'woman', { x, y: Y(x, z), z, yaw: f.ang + (rand() < 0.5 ? 0 : Math.PI), act: ACT.work }));
+      const reap = f.kind === 1;
+      c.add(person(rand() < 0.75 ? 'worker' : 'woman', {
+        x, y: Y(x, z), z, yaw: f.ang + (rand() < 0.5 ? 0 : Math.PI),
+        act: reap ? ACT.reap : ACT.work, prop: reap ? PROP.sickle : PROP.none,
+        cycle: reap ? [[ACT.reap, 25], [ACT.bind, 8], [ACT.idle, 4]] : [[ACT.work, 30], [ACT.idle, 5]],
+      }));
     }
-    for (const f of fields.filter((ff) => ff.kind === 0).slice(0, N(8))) {
-      const ax = Math.cos(f.ang), az = Math.sin(f.ang), L = f.w * 0.42;
-      const pts = [];
-      for (let k = 0; k <= 8; k++) { const t = -L + (2 * L * k) / 8; pts.push([f.x + ax * t, Y(f.x + ax * t, f.z + az * t), f.z + az * t]); }
-      const plough = c.add(person('worker', { path: new Path(pts), s: rand() * L, speed: 0.55, pause: [1.5, 3], lateral: 0 }));
-      for (const s of [-0.65, 0.65]) c.add(beast('ox', { follow: plough, gap: -2.6, lateral: s }));
-    }
+    for (const f of fields.filter((ff) => ff.kind === 0).slice(0, N(8))) ploughTeam(c, f, Y);
     for (const fl of ctx.plan.floors.filter((t) => period === 'early' || !insidePolygon(t.x, t.z, LATE_POLY))) {
       const ring = [];
-      for (let k = 0; k <= 16; k++) { const a = (k / 16) * Math.PI * 2, r = fl.r - 1.6; ring.push([fl.x + Math.cos(a) * r, Y(fl.x, fl.z) + 0.1, fl.z + Math.sin(a) * r]); }
-      c.add(beast('ox', { path: new Path(ring), loop: true, s: rand() * 30, speed: 0.5, pause: [0, 0], lateral: 0 }));
+      for (let k = 0; k <= 16; k++) { const a = (k / 16) * Math.PI * 2, r = fl.r - 2.2; ring.push([fl.x + Math.cos(a) * r, Y(fl.x, fl.z) + 0.1, fl.z + Math.sin(a) * r]); }
+      const ox = c.add(beast('ox', { path: new Path(ring), loop: true, s: rand() * 30, speed: 0.5, pause: [0, 0], lateral: 0, look: SLEDGE }));
+      c.add(beast('ox', { follow: ox, gap: 0.2, lateral: 0.9 }));
+      c.add(person('worker', { follow: ox, gap: 2.0, lateral: 0, ride: true, lift: 0.08, act: ACT.idle, prop: PROP.staff }));
       for (let k = 0; k < 2; k++) {
         const a = rand() * 6.28, x = fl.x + Math.cos(a) * (fl.r + 1), z = fl.z + Math.sin(a) * (fl.r + 1);
-        c.add(person('worker', { x, y: Y(x, z), z, yaw: a + Math.PI, act: ACT.work, prop: PROP.staff }));
+        // Winnowing when the afternoon wind gets up (Ruth 3:2); forking the straw before.
+        c.add(person('worker', { x, y: Y(x, z), z, yaw: Math.PI / 2 + (rand() - 0.5) * 0.6, act: ACT.winnow, prop: PROP.fork, cycle: [[ACT.winnow, 40], [ACT.idle, 6]] }));
       }
     }
     for (const road of ROADS.filter((r) => r.periods.includes(period))) {
@@ -316,8 +375,19 @@ export function buildLife(mats, ctx) {
       if (pts.length < 2) continue;
       const path = new Path(pts);
       for (let i = 0; i < N(7); i++) {
-        const t = c.add(person(rand() < 0.7 ? 'man' : 'woman', { path, s: rand() * path.length, dir: rand() < 0.5 ? 1 : -1, pause: [5, 30], lateral: (rand() < 0.5 ? -1 : 1) * 1.1, prop: rand() < 0.4 ? PROP.staff : PROP.none }));
-        if (rand() < 0.55) c.add(beast('donkey', { follow: t, gap: 2.1, lateral: 0 }));
+        const o = { path, s: rand() * path.length, dir: rand() < 0.5 ? 1 : -1, pause: [5, 30], lateral: (rand() < 0.5 ? -1 : 1) * 1.1 };
+        if (rand() < 0.2) {
+          // Riding a donkey, with someone walking behind.
+          const d = c.add(beast('donkey', { ...o, speed: 0.9, look: SADDLE }));
+          c.add(person(rand() < 0.7 ? 'man' : 'woman', { follow: d, gap: 0, lateral: 0, ride: true, act: ACT.ride, lift: 0.4 }));
+          if (rand() < 0.5) c.add(person('worker', { follow: d, gap: 2, lateral: 0.3, prop: PROP.staff }));
+          continue;
+        }
+        const t = c.add(person(rand() < 0.7 ? 'man' : 'woman', { ...o, prop: rand() < 0.4 ? PROP.staff : PROP.none }));
+        if (rand() < 0.55) {
+          t.moveAct = ACT.lead;
+          c.add(beast('donkey', { follow: t, gap: 2.1, lateral: 0, look: rand() < 0.7 ? PANNIERS : 0 }));
+        }
       }
     }
     return c.build(kit).group;
@@ -325,14 +395,21 @@ export function buildLife(mats, ctx) {
   groups.countryEarly = country('countryEarly', 'early');
   groups.countryLate = country('countryLate', 'late');
   // 573 BC: "some of the poorest of the land" left as vinedressers and
-  // ploughmen (2 Kgs 25:12; Jer 39:10).
+  // ploughmen (2 Kgs 25:12; Jer 39:10): a lean team or two, hoeing, pruning.
   {
     const c = make('countryRuin');
     const fields = ctx.plan.fields.filter((f) => !insidePolygon(f.x, f.z, LATE_POLY));
-    for (let i = 0; i < N(14); i++) {
+    const Y = (x, z) => terrainY(x, z, 'square');
+    for (let i = 0; i < N(10); i++) {
       const f = fields[Math.floor(rand() * fields.length)];
       const x = f.x + (rand() - 0.5) * f.w * 0.5, z = f.z + (rand() - 0.5) * f.d * 0.5;
-      c.add(person(rand() < 0.7 ? 'worker' : 'woman', { x, y: terrainY(x, z, 'square'), z, yaw: rand() * 6.28, act: ACT.work, cloth: pick(WOOL.slice(1)) }));
+      c.add(person(rand() < 0.7 ? 'worker' : 'woman', { x, y: Y(x, z), z, yaw: rand() * 6.28, act: ACT.work, cloth: pick(WOOL.slice(1)), cycle: [[ACT.work, 30], [ACT.idle, 6]] }));
+    }
+    for (const f of fields.filter((ff) => ff.kind === 0).slice(0, 2)) ploughTeam(c, f, Y, { cloth: WOOL[4] });
+    // Vinedressers among the vines south of the city, pruning in spring.
+    for (let i = 0; i < N(6); i++) {
+      const x = -140 + rand() * 280, z = 1190 + rand() * 220;
+      c.add(person('worker', { x, y: Y(x, z), z, yaw: rand() * 6.28, act: ACT.crouch, cloth: pick(WOOL.slice(2)), prop: PROP.sickle, cycle: [[ACT.crouch, 12], [ACT.work, 10], [ACT.idle, 4]], info: 'city-poor' }));
     }
     groups.countryRuin = c.build(kit).group;
   }
@@ -353,7 +430,7 @@ export function buildLife(mats, ctx) {
         c.add(beast(rand() < 0.32 ? 'goat' : 'sheep', { x, y: Y(x, z), z, yaw: rand() * 6.28, act: ACT.graze, always: true, wander: { x: cx, z: cz, r: 20, y: Y, pause: [3, 14] } }));
       }
       const x = cx + 18, z = cz;
-      c.add(person('man', { x, y: Y(x, z), z, yaw: rand() * 6.28, prop: PROP.staff, always: true }));
+      c.add(person('man', { x, y: Y(x, z), z, yaw: rand() * 6.28, prop: PROP.staff, always: true, act: rand() < 0.4 ? ACT.sit : ACT.idle, info: 'city-shepherd' }));
     }
     groups.flocks = c.build(kit).group;
   }

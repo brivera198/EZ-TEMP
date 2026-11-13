@@ -147,3 +147,168 @@ The tour follows Ezekiel 40–48 in the order of the text. Its wording paraphras
 ## Terrain
 
 The terrain is a schematic model built from published elevations (Temple Mount summit 743 m, Mount of Olives 818 m, Gihon Spring about 636 m, En-rogel about 600 m) and approximate valley courses. Beyond the city it settles onto the plateau (about 850 m to the north and toward Bethlehem), falls east through the desert into the Dead Sea rift and west toward the Shephelah. It is not survey data.
+
+## Daily life in detail
+
+Added for walking and flying through the city. The season is spring throughout: Ezekiel 40:1 dates the vision to the tenth day of the first month, so the hills are green, the barley harvest is beginning, and there is no vintage or olive harvest. Things that do not belong to Iron Age Judah are left out on purpose: coins, rotary querns, true arches, glass, cotton, citrus, cactus and the like.
+
+### The houses, lanes, gates and markets
+
+| What is shown | Status | Source or reason |
+|---|---|---|
+| Wooden door leaf turning inward, stone lintel and threshold | Probable | Door sockets and thresholds in Iron Age houses; Judg 19:27; plank pattern is the model's choice |
+| Window slits high in the walls | Probable | Small, high openings in Iron Age houses (no glass); size and place are the model's choice |
+| Roof beam ends through the walls; wooden drain spout | Conjectural | Roofs of beams, branches and rolled clay are attested; the showing ends and the spout are the model's choice |
+| Stone stair in the four-room courtyard; ladder on broad-room houses | Probable | Stairs to the roof or upper floor in four-room houses (e.g. Tell en-Nasbeh); ladders are the model's choice |
+| Stone manger between pillars | Probable | Troughs between the pillars of Iron Age pillared houses and buildings (e.g. Hazor, Beersheba) |
+| Mirror-image house plans | Conjectural | Model's choice, for variety |
+| Burned houses: blackened walls, ash, fallen roof clay, charred beams, toppled pillars | Attested | 2 Kgs 25:9; Jer 52:13; City of David Area G (Burnt Room, House of Ahiel, House of the Bullae) |
+| Stone benches in the gate | Attested | Ruth 4:1–2; Prov 31:23; Lam 5:14; bench at the Iron Age gate of Tel Dan |
+| Metal straps on the gate leaves | Probable | "Bars of bronze" (1 Kgs 4:13); Ps 107:16; Assyrian Balawat gate bands; their form here is the model's choice |
+| Burned gate leaves lying in the passage (573 BC) | Probable | Neh 1:3; Lam 2:9; 2 Kgs 25:9 |
+| Market stalls in the gate squares | Attested (trade in the gate); stalls Conjectural | 2 Kgs 7:1, 18; Zeph 1:10–11; awnings and tables are the model's choice |
+| Grain, barley and flour sold in the gate | Attested | 2 Kgs 7:1 |
+| Dried fish at the Fish Gate | Probable | Zeph 1:10; Neh 13:16 (Persian period); Mediterranean and Nile fish bones in Iron Age City of David deposits |
+| Pressed fig cakes | Attested | 1 Sam 25:18; 2 Kgs 20:7 |
+| Oil in jars | Attested | Ezek 27:17; 2 Chr 32:28 |
+| Pottery sold toward the Valley Gate and Hinnom | Probable | Jer 18:2–3; 19:1–2 (the potter, the Potsherd Gate) |
+| Cloth and garments sold | Attested | Prov 31:24 |
+| Green barley sheaves, leeks, lentils (spring) | Probable | Barley harvest begins in Nisan (Lev 23:10; Ruth 1:22); lentils 2 Sam 17:28; leeks Num 11:5 |
+| Fleeces | Probable | 2 Kgs 3:4; wool trade; model's choice in the market |
+| Balance and stone weights; no coins | Attested | Jer 32:9–10; Amos 8:5; inscribed Judahite shekel weights (8th–7th c.) |
+| Stone trough in the gate square | Conjectural | Model's choice |
+| Saddle quern and upper stone | Attested | Exod 11:5; Deut 24:6; Judg 9:53; found in nearly every Iron Age house |
+| Clay oven (tannur), hearth of stones, cooking pot | Attested | Lev 26:26; Hos 7:4; Jer 37:21; Ezek 24:3–5; Iron Age cooking pots |
+| Storage jars; four-handled royal type in `late` | Attested (lmlk jars c. 700 BC; rosette stamps c. 600 BC) | lmlk handles from Jerusalem and Lachish; rosette-stamped handles from the City of David; 2 Chr 32:28 |
+| Juglets, bowls, red-slipped ware | Attested | Iron Age II pottery of Judah |
+| Stone mortar and pestle | Attested | Num 11:8; Prov 27:22 |
+| Cistern mouth with capstone | Attested | 2 Kgs 18:31; Jer 38:6; Prov 5:15; rock-cut plastered cisterns |
+| Firewood and thorny brushwood | Attested | Jer 7:18; Eccl 7:6; Ps 58:9 |
+| Baskets | Attested | Jer 24:1–2; Amos 8:1 |
+| Reed or palm mats | Probable | Model's choice for where they lie |
+| Stone bench by house doors | Conjectural | Model's choice |
+| Ladder against a house wall | Probable | Model's choice for where it stands |
+| Flax drying on roofs (spring) | Attested | Josh 2:6; Gezer calendar "month of pulling flax" |
+| Stone roof roller | Probable | Stone cylinders found in Iron Age houses and taken as roof rollers |
+| Grain or lentils drying on roof mats | Conjectural | Model's choice |
+| Shade of poles and branches on roofs | Conjectural | Not the festival booths of Neh 8:16, which belong to autumn; model's choice |
+| Washing lines on roofs | Conjectural | Model's choice |
+| Stone steps up to raised doors | Probable | Houses on terraces on the City of David slope; the form is the model's choice |
+| Toppled jars, potsherds, ash and charred beams in the ruin | Attested | City of David and Jewish Quarter destruction layers of 586 BC |
+| Arrowheads in the ruin | Attested | Bronze three-bladed and iron arrowheads in the destruction by the Israelite tower, Jewish Quarter (Avigad) |
+| Rubble spilled into the lanes | Probable | Collapse debris of 586 BC; Lam 2:8–9; Neh 2:13–14 |
+
+### People at work
+
+| What is shown | Status | Source or reason |
+|---|---|---|
+| Saddle quern, kneeling to grind | Attested | Exod 11:5; Isa 47:2; querns in Iron Age houses |
+| Clay oven (tannur) | Attested | Lev 26:26; Hos 7:4–7; excavated ovens |
+| Bakers' street | Attested (place in city conjectural) | Jer 37:21 |
+| Warp-weighted loom with clay weights | Attested | loom weights in Iron Age houses; Judg 16:13–14 |
+| Spinning with distaff and spindle | Attested | Prov 31:19; Exod 35:25; spindle whorls |
+| Potters, wheel, kiln, Potsherd Gate | Attested (quarter's location model's choice) | Jer 18:1–6; 19:1–2; Isa 41:25 |
+| Smith with forge and bellows | Probable (forge form model's reconstruction) | Isa 44:12; 54:16; 2 Kgs 24:14 |
+| Dye vats and skeins | Conjectural (dye works debated) | Tell Beit Mirsim; Prov 31:22 |
+| Scribes with ink and scroll | Attested (seating in gate model's choice) | Jer 36:18; 32:10–14; Ezek 9:2; City of David bullae |
+| Elders on benches in the gate | Attested | Ruth 4:1–2; gate benches at Dan, Beersheba |
+| Market sellers on mats, silver weighed, no coins | Attested | 2 Kgs 7:1; Prov 20:14 |
+| Women drawing water morning and evening | Attested (drawing point at Gihon model's choice) | Gen 24:11; 1 Kgs 1:33 |
+| Washing at the pool | Probable | — |
+| Children playing, old people sitting in the streets | Attested (Zech is c. 520 BC) | Zech 8:4–5; Jer 6:11 |
+| Watchmen on walls and gate roof, runner | Attested | Isa 62:6; 2 Sam 18:24–27; Ezek 3:17 |
+| Watch fire on the gate | Conjectural | model's choice |
+| Soldiers drilling | Probable (drill form conjectural) | 2 Chr 26:11–14; Lachish reliefs |
+| Pilgrims going up together | Attested | Ps 122; Isa 30:29; Exod 12:3 |
+| Mourning women, bier, hands on head | Attested | Jer 9:17–20; 2 Sam 3:31; 13:19 |
+| Shepherd leading flock through a gate | Probable | Mic 2:12–13; Jer 33:13 |
+| Barley harvest: reapers, binders, gleaners, noon meal | Attested | Ruth 2; Gezer calendar |
+| Iron sickle | Attested | Iron Age II sickles; 1 Sam 13:20 |
+| Threshing sledge drawn by oxen, driver on it | Attested | Isa 41:15; 2 Sam 24:22 |
+| Winnowing with fork in the afternoon wind | Attested | Ruth 3:2; Jer 15:7 |
+| Ard drawn by a yoke of oxen, goad | Attested | 1 Kgs 19:19; 1 Sam 13:20–21 |
+| Riding donkeys, panniers | Attested | Num 22:21; 1 Sam 25:18 |
+| Camel caravan with loads | Attested | Gen 37:25; 1 Kgs 10:2; Isa 60:6; Timna camel bones |
+| Two-horse chariot with driver and warrior, Horse Gate | Attested (chariot form after Assyrian reliefs) | 1 Kgs 10:26; 2 Kgs 11:16; Jer 31:40 |
+| Men's head-cloth with band, fillet | Attested | Lachish reliefs |
+| Soft folded cap | Attested | Black Obelisk of Shalmaneser III |
+| Women's long shawl | Attested | Lachish reliefs |
+| Tassels with blue cord on mantle corners | Attested (in practice: Probable) | Num 15:38; Deut 22:12 |
+| Striped and banded wool mantles | Probable | Beni Hasan painting (earlier, Asiatics); 2 Sam 13:18 |
+| Kohl on women's eyes | Attested | 2 Kgs 9:30; Jer 4:30 |
+| Sandals or bare feet | Attested | Deut 25:9; Isa 20:2 |
+| 573 BC: few poor, vinedressers, scavengers, woman alone | Attested (scenes model's choice) | 2 Kgs 25:12; Jer 39:10; Lam 1:1; 2:10 |
+
+### Trees, crops and the land
+
+| What is shown | Status | Source or reason |
+|---|---|---|
+| Olive, fig, almond, pomegranate, vine as the trees of the farmed hills and gardens | Attested | Deut 8:8; Mic 4:4; Song 2:13; 6:11 |
+| Holm oak and terebinth on uncultivated slopes | Attested | Isa 6:13; Hos 4:13 |
+| Carob in the hills | Probable (native to the region; not named in the Hebrew Bible) | Zohary, Plants of the Bible (1982) |
+| Tamarisk in the Kidron bed and at the desert edge | Probable | Gen 21:33; 1 Sam 22:6 (tamarisk as a tree of the land) |
+| Sycamore fig in the warm valley south of the city | Conjectural (it grows in the Shephelah and Jordan valley; at Jerusalem's altitude doubtful) | 1 Kgs 10:27; Amos 7:14 |
+| Date palms in the King's Garden | Conjectural (palms near Jerusalem in Neh 8:15; dates ripen poorly at this altitude) | Neh 8:15 |
+| Cypress in the King's Garden | Conjectural (identification of berosh uncertain) | model's choice |
+| Spring season: figs in leaf with green fruit, vines in blossom, barley ripe and being reaped, wheat green | Attested | Song 2:11–13; Exod 9:31–32; Ruth 1:22; Gezer calendar |
+| Wildflowers: anemone, poppy, crown daisy, chamomile, wild mustard, blue lupin, cyclamen, Syrian thistle | Probable (species of the hills in March–April today; not named in the Bible) | Isa 40:6–8; Song 2:12; Zohary 1982 |
+| Vines trained low on the ground, some on forked props | Probable (low vine attested; props conjectural) | Ezek 17:6; Isa 5:2 |
+| Field watchtower: round dry-stone tower, roof booth, ladder | Probable (towers attested; form of booth and ladder conjectural) | Isa 5:2; 1:8; field-tower surveys round Jerusalem |
+| Watchman's booth of poles and branches | Attested (form conjectural) | Isa 1:8; Job 27:18 |
+| Rock-cut winepress: treading floor and collecting vat | Attested | Isa 5:2; Judg 6:11; Gibeon wine installations (Pritchard 1964) |
+| Olive press with crushing basin, beam and stone weights | Attested (Iron II type) | Mic 6:15; Tel Miqne-Ekron presses (7th c. BC) |
+| Wells with capstone and trough; cisterns with capstones | Attested (exact forms conjectural) | Gen 29:2–3; Deut 6:11; Jer 2:13 |
+| Horizontal clay beehives in rows | Attested in Israel (Tel Rehov, 10th–9th c. BC); in Judah Probable | Tel Rehov apiary; Judg 14:8 |
+| Boundary cairns at field corners | Conjectural (boundary marks attested, their form not) | Deut 19:14; Prov 22:28 |
+| Dry-stone field and terrace walls | Attested | Isa 5:2, 5; Prov 24:30–31; Num 22:24 |
+| Sheaves on the reaped strip | Attested | Ruth 2:7, 15; Ps 126:6 |
+| Ploughed fields in Nisan (for summer crops) | Probable | Gezer calendar ("late sowing") |
+| Vegetable and herb beds in the King's Garden | Probable (kinds conjectural) | 1 Kgs 21:2; Deut 11:10; Neh 3:15 |
+| Sheepfold with thorn brush on the wall | Probable (folds attested; thorn topping conjectural) | Num 32:16; thorn topping model's choice |
+| Reeds at the pools, channel and Kidron bed | Probable (extent model's choice) | Job 8:11; Isa 35:7 |
+| 573 BC: fields gone to thorns and briers, walls broken | Attested (as prophecy/description) | Isa 7:23–25; 32:13; Prov 24:31; 2 Kgs 25:12 |
+| 573 BC: stumps of trees near the walls | Probable | Jer 6:6; Deut 20:19–20 |
+| Footpaths from towers, folds and floors to the roads | Conjectural | model's choice |
+
+### Birds, animals and the wind
+
+| What is shown | Status | Source or reason |
+|---|---|---|
+| Wild rock doves in the Kidron cliffs | Attested | Song 2:14; Jer 48:28 |
+| Dove flocks resting on the city roofs (kept doves) | Probable | Lev 1:14; 5:7; 12:8 (doves at hand for offerings); Isa 60:8; keeping in cotes not described for Iron Age Judah |
+| Swallows and swifts over roofs and temple courts | Attested | Ps 84:3; Prov 26:2; Jer 8:7 |
+| Sparrows in lanes and on roofs | Attested | Ps 84:3; Ps 102:7 |
+| White storks passing north in spring | Attested | Jer 8:7; Ps 104:17; spring migration over the Levant (natural history) |
+| Griffon vultures soaring on thermals; roosting on cliffs | Attested | Job 39:27–30; Mic 1:16; Prov 30:17 |
+| More vultures and ravens over and in the ruins, 573 BC | Conjectural | Jer 7:33; 34:20 as imagery; 13 years after the fall, the numbers are the model's choice |
+| Short-toed eagles | Probable | nesher (Deut 32:11; Prov 30:19); species is the model's choice |
+| Ravens | Attested | Prov 30:17; Ps 147:9; Isa 34:11 |
+| Partridges (chukar) on the hillsides | Attested | 1 Sam 26:20; Jer 17:11 |
+| Hens and a rooster in courtyards, late period only | Probable | Seal of Jaazaniah, Tell en-Nasbeh, c. 600 BC (fighting cock); chicken bones rare in Iron Age Judah |
+| Little owls in ruins and cliffs at night | Probable | Ps 102:6; Lev 11:17; Isa 34:11; Zeph 2:14 (species identifications uncertain) |
+| Bats at dusk | Attested | Lev 11:19; Isa 2:20 |
+| Street dogs in the lanes and at the refuse outside the Dung Gate | Attested | Ps 59:6, 14–15; 1 Kgs 14:11; 2 Kgs 9:35–36; Exod 22:31 |
+| Gazelles on the slopes east of Olivet | Attested (as game of the region); placement Probable | Song 2:9; Deut 12:15; 1 Kgs 4:23 |
+| Ibex on the cliffs of the Kidron gorge | Probable | Ps 104:18; 1 Sam 24:2; how near Jerusalem is uncertain |
+| Foxes in the vineyards and the ruins | Attested | Song 2:15; Lam 5:18; Ezek 13:4 |
+| Rock hyraxes on rocky slopes | Attested | Ps 104:18; Prov 30:26 |
+| Lizards (starred agama) on house walls | Probable | Prov 30:28 (semamit: lizard, gecko or spider); species is the model's choice |
+| Butterflies over spring flowers (incl. painted ladies) | Probable | Not in the Bible; spring natural history, model's choice |
+| Bees at blossom | Attested | Judg 14:8; Isa 7:18; Tel Rehov apiary, 10th–9th c. BC |
+| Flies at the refuse heap | Attested | Eccl 10:1; Isa 7:18 |
+| A line of ants | Attested | Prov 6:6–8; 30:25 |
+| Chaff blowing from threshing floors in the afternoon and evening wind | Attested | Ps 1:4; Hos 13:3; Ruth 3:2 |
+| Road dust in the afternoon westerly | Probable | Regional afternoon sea breeze; model's choice |
+| Dust devil on the desert side at midday | Probable | Isa 17:13; Ps 83:13 ("whirling dust") |
+| Petals and leaves drifting in the King's Garden | Conjectural | Song 2:13; 6:11 (spring bloom); model's choice |
+
+### Surfaces and light
+
+| What is shown | Status | Source or reason |
+|---|---|---|
+| City and terrace walls of unhewn fieldstones in rough courses with mud mortar | Attested | Broad Wall and City of David walls (Avigad; Shiloh excavations) |
+| Royal ashlar with drafted margins and raised boss, courses ~0.5 m | Attested | Samaria, Megiddo, Ramat Rahel, City of David ashlars |
+| Mud plaster tempered with straw, lime whitewash on houses | Probable | general Iron Age practice; whitewash colour model's choice |
+| Packed-earth roofs rolled flat | Probable | stone roof rollers known from Iron Age Levantine sites; ethnographic |
+| Tabby-woven cloth key, ~4 mm threads | Probable | Iron Age textiles (Kuntillet Ajrud); thread size model's choice |
+| Morning valley mist, afternoon dust haze in spring | Conjectural | model's choice (plausible for Nisan) |

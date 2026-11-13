@@ -37,7 +37,7 @@ export function build(mats, ctx) {
 |---|---|
 | `quality` | `'low'` (phones, small machines) or `'high'` |
 | `plan` | The countryside plan from `planCountryside()`: fields, threshing floors, folds, farmsteads |
-| `city` | What `buildCity()` returned: `houses.late` / `houses.early`, `grids`, `gates`, `walk`, `night`, `groups` |
+| `city` | What `buildCity()` returned: `houses.late` / `houses.early`, `grids`, `gates`, `stalls`, `walk`, `night`, `groups` |
 | `terrainY(x, z)` | Height of the ground |
 | `free(x, z, margin)` | False on the temple platforms and the palace terrace, which change with the vision shown. Keep off them |
 
@@ -45,7 +45,8 @@ export function build(mats, ctx) {
 
 ## Rules
 
-- Mark a mesh `userData.solid = true` to make it block the walker and be stood on. Use it for a few large things only: every solid mesh is tested each step.
+- Mark a mesh `userData.solid = true` to make it block the walker and be stood on. Solid meshes are filed once in a grid (`src/walker.js`), so many are cheap; one that moves every frame is tested on its own each step, so keep those few.
+- `mats` includes textured materials for props: `wood`, `woodDark`, `pottery`, `clay`, `cloth`, `thatch`, `bark` (projected from three sides, tinted by instance or vertex colour, for things that do not move) and `timber`, `mudPlaster`, `whitewash`.
 - Give a mesh `userData.infoId` to open an info card when it is clicked.
 - Haze, cloud shadows and night lighting are patched into every material when the scene is finished, so a module's own `MeshStandardMaterial` needs nothing special.
 - Draw many alike things as one `InstancedMesh` or one merged geometry. Things only worth seeing close up should follow `env.focus`, as the crowds do.
