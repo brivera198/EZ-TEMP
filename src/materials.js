@@ -1057,8 +1057,9 @@ export function makeMaterials({ quality = 'high', anisotropy = 8 } = {}) {
     bark: prop(barkT, 'bark', 0xffffff, { normal: 1.3 }),
   };
   // Sky light from the environment (the real sky at this hour, and the ground
-  // it lights) is the ambient for every surface.
-  for (const mat of Object.values(m)) if (mat.isMeshStandardMaterial) mat.envMapIntensity = 1;
+  // it lights) fills the shade; metals take it in full for their reflections.
+  // Kept low on stone and earth: a blue sky at full strength greys the land.
+  for (const mat of Object.values(m)) if (mat.isMeshStandardMaterial) mat.envMapIntensity = mat.metalness < 0.5 ? 0.3 : 1;
   // The terrain shader (terrain.js) blends these by slope, path and field.
   const ground = (args) => {
     const N = args[1], g = { a: placeholder(N, false, [128, 0, 128, 255]), n: placeholder(N, false, [128, 128, 240, 255]), S: args[2]?.S || 2.5 };

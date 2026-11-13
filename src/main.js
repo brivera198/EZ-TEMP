@@ -203,7 +203,7 @@ function setTime(hours) {
   const dusk = sm(sunDir.y, -0.22, 0.0) * (1 - sm(sunDir.y, 0.0, 0.2));
   // By day the environment (envSky, envGround) is the sky light; the
   // hemisphere light is the fill of twilight and moonlit night.
-  hemi.intensity = 0.1 + 0.1 * day + 0.35 * dusk;
+  hemi.intensity = 0.1 + 0.42 * day + 0.35 * dusk;
   hemi.color.setRGB(0.2, 0.26, 0.42).lerp(_c.setRGB(0.77, 0.84, 0.93), day);
   hemi.groundColor.setRGB(0.05, 0.05, 0.07).lerp(_c.setRGB(0.55, 0.42, 0.29), day);
   // At night the eye adapts: open the exposure and let the haze go blue-black.
